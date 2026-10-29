@@ -1,0 +1,10 @@
+{
+  "name": "smart-city-utilities",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Smart City Utilities & Infrastructure Management System: browser prototype (DBMS mini-project)",
+  "scripts": {
+    "start": "npx --yes serve@14.2.4 -l 8080 .",
+    "serve:python": "python3 -m http.server 8080"
+  }
+}
