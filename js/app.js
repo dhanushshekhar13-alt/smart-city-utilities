@@ -75,7 +75,8 @@ function renderTop(){
     <div class="spacer"></div>
     <div class="clock"><span class="time" title="Simulated city clock (1 tick = 15 min)">City time ${fmtDT(now)}</span>
       <button class="btn small" data-act="sim-toggle">${SIM.running?"Pause meters":"Resume meters"}</button>
-      <button class="btn small" data-act="ff" title="Advance one simulated hour">+1 hour</button></div>
+      <button class="btn small" data-act="ff" title="Advance one simulated hour">+1 hour</button>
+      ${now<NOV1?`<button class="btn small" data-act="month-end" title="Run the meters to midnight on 1 November, then close October and send the bills">Jump to month end</button>`:""}</div>
     ${u?`<div class="row"><span class="ink2">${esc(u.display)}</span><button class="btn small" data-act="logout">Switch user</button></div>`:""}`;
 }
 function renderRail(){
@@ -113,8 +114,9 @@ V.home=()=>{
   const ut=SESSION.sel.ut||"ELECTRICITY"; const m=metersOf(pid).find(x=>x.utility_type===ut);
   const pts=seriesFor(m.meter_code); const last=pts[pts.length-1];
   const due=rlsInvoices(u).filter(i=>i.property_id===pid&&i.payment_status!=="PAID");
-  const oct=metersOf(pid).map(mm=>{const c=cycleTotals(mm.meter_code,OCT1,now);return {mm,units:c?c.closing-c.opening:0};});
-  const est=oct.reduce((s,o)=>s+tieredCharge(o.mm.utility_type,o.units,"2026-10-31").reduce((a,t)=>a+t.amount,0),0);
+  const nov=now>=NOV1, from=nov?NOV1:OCT1;
+  const oct=metersOf(pid).map(mm=>{const c=cycleTotals(mm.meter_code,from,now);return {mm,units:c?c.closing-c.opening:0};});
+  const est=oct.reduce((s,o)=>s+tieredCharge(o.mm.utility_type,o.units,nov?"2026-11-30":"2026-10-31").reduce((a,t)=>a+t.amount,0),0);
   const notif=MG.notifications.filter(n=>n.user_id===u.user_id&&!n.read_at).length;
   return `<div class="page-head"><span class="eyebrow">Resident portal</span><h1>Welcome back, ${esc(u.display.split(" ")[0])}</h1></div>
   ${props.length>1?`<div class="tabs" role="group" aria-label="Property">${props.map(x=>`<button aria-pressed="${x.property_id===pid}" data-act="sel-prop" data-id="${x.property_id}">${esc(x.property_code)} · ${esc(x.address_line.split(",")[0])}</button>`).join("")}</div>`:""}
@@ -128,7 +130,7 @@ V.home=()=>{
      </tbody></table></div></div>
    <div class="kpis" style="align-content:start">
      <div class="kpi"><span class="l">Unpaid bills ${src("pg")}</span><span class="v">${due.length?inr(due.reduce((s,i)=>s+i.total_amount,0)):"₹0.00"}</span><span class="l">${due.length?`${due.length} bill${due.length>1?"s":""}, next due ${fmtD(PG.billing_cycle.find(c=>c.cycle_id===due[0].cycle_id).due_date)}`:"All paid"}</span></div>
-     <div class="kpi"><span class="l">October so far ${src("mg")}</span><span class="v">${inr(est)}</span><span class="l">Estimated from live readings with current slabs</span></div>
+     <div class="kpi"><span class="l">${nov?"November":"October"} so far ${src("mg")}</span><span class="v">${inr(est)}</span><span class="l">Estimated from live readings with current slabs</span></div>
      <div class="kpi"><span class="l">Unread alerts ${src("mg")}</span><span class="v">${notif}</span><span class="l">${notif?`<button class="btn small" data-act="go" data-view="alerts">Open alerts</button>`:"Nothing unusual"}</span></div>
    </div></div>
   <div class="panel"><div class="panel-head"><div class="row"><h2>Live usage, last 24 hours</h2>${src("mg")}</div>
@@ -151,7 +153,7 @@ V.bills=()=>{
   <div class="grid2">
    <div class="panel"><div class="panel-head"><h2>Your invoices</h2>${src("pg")}</div><div class="tablewrap"><table>
      <thead><tr><th>Invoice</th><th>Cycle</th><th>Property</th><th class="r">Amount</th><th>Status</th></tr></thead><tbody>
-     ${invs.map(i=>`<tr class="click" data-act="sel-inv" data-id="${i.invoice_id}" tabindex="0" ${i===sel?'style="outline:2px solid var(--accent);outline-offset:-2px"':""}><td class="mono">${i.invoice_no}</td><td>${cycleName(i.cycle_id)}</td><td class="mono">${propById(i.property_id).property_code}</td><td class="r">${inr(i.total_amount)}</td><td>${badge(i.payment_status)}</td></tr>`).join("")}
+     ${invs.map(i=>`<tr class="click" data-act="sel-inv" data-id="${i.invoice_id}" tabindex="0" style="${i===sel?"outline:2px solid var(--accent);outline-offset:-2px;":""}${i.cycle_id===4?"box-shadow:inset 4px 0 0 var(--accent);font-weight:600":""}" ${i.cycle_id===4?'title="New bill"':""}><td class="mono">${i.invoice_no}</td><td>${cycleName(i.cycle_id)}</td><td class="mono">${propById(i.property_id).property_code}</td><td class="r">${inr(i.total_amount)}</td><td>${badge(i.payment_status)}</td></tr>`).join("")}
      </tbody></table></div>
      <div class="stack" style="margin-top:12px"><p class="ink2">Row-level security means this list is filtered by PostgreSQL itself, not just by the app.</p>
      <div class="row"><button class="btn" data-act="rls-try" data-id="${other?other.invoice_id:""}">Try to open ${otherName}'s invoice</button></div><div id="rls-out"></div></div></div>
@@ -310,8 +312,9 @@ V.billing=()=>{
   const readings=PG.meter_reading.filter(r=>r.cycle_id===4);
   const invs=PG.invoice.filter(i=>i.cycle_id===4);
   const lastRes=SESSION.sel.billRes;
-  return `<div class="page-head"><span class="eyebrow">Municipal operations</span><h1>Billing run: October 2026</h1>
-   <p class="ink2">Two steps. First the bridge reads each meter's opening and closing register from MongoDB and writes one row per meter to PostgreSQL. Then a stored procedure turns those rows into invoices using the tariff slabs. For the demo, the cycle closes at the current city time.</p></div>
+  return `<div class="page-head"><span class="eyebrow">Municipal operations</span><h1>Billing run: October 2026 ${badge(now>=NOV1?"CLOSED":"PENDING",now>=NOV1?"closed":"open")}</h1>
+   <p class="ink2">Two steps. First the bridge reads each meter's opening and closing register from MongoDB and writes one row per meter to PostgreSQL. Then a stored procedure turns those rows into invoices using the tariff slabs. ${now>=NOV1?"October closed at midnight on 1 November and the nightly job billed it; run either step again to show nothing is duplicated.":"You can run both steps now (the cycle then closes at the current city time), or press <b>Jump to month end</b> to let the meters run to 1 November and have the nightly job do it."}</p>
+   ${now<NOV1?`<div class="row"><button class="btn primary" data-act="month-end">Jump to month end</button><span class="muted">Fast-forwards ${Math.round((NOV1-now)/HOUR)} simulated hours of meter readings, then closes October</span></div>`:""}</div>
   <div class="grid2"><div class="panel stack"><div class="row" style="justify-content:space-between"><h2>1 · Aggregate usage</h2><div class="row">${src("mg")}→${src("pg")}</div></div>
     <pre class="code">${esc(PIPE_CYCLE)}</pre>
     <div class="row"><button class="btn primary" data-act="agg">Run aggregation</button><span class="muted">${runs.length} run${runs.length===1?"":"s"} · ${readings.length}/24 meter readings</span></div></div>
@@ -329,12 +332,13 @@ CALL sp_generate_invoice(property_id, 4);
    ${readings.map(r=>{const m=PG.utility_meter.find(x=>x.meter_id===r.meter_id);const p=propById(m.property_id);const i=invs.find(x=>x.property_id===p.property_id);return `<tr><td class="mono">${m.meter_code}</td><td class="mono">${p.property_code}</td><td class="r">${n2(r.opening_register)}</td><td class="r">${n2(r.closing_register)}</td><td class="r"><b>${n2(r.total_units_consumed)}</b> ${UT[m.utility_type].unit}</td><td class="r">${r.source_doc_count}</td><td>${i?`<span class="mono">${i.invoice_no}</span> ${inr(i.total_amount)}`:"–"}</td></tr>`;}).join("")}</tbody></table></div>
    <p class="muted" style="font-size:12px;margin-top:6px">Units = closing − opening of the cumulative register, so a duplicated or late reading cannot change the bill. A pipe burst shows up here as extra water.</p></div>`:""}`;
 };
-function runAggregation(){
+function aggregateOctober(){
+  const to=Math.min(now,NOV1); // the cycle never takes readings from after midnight on 1 November
   const run={run_id:uid(),cycle_id:4,started_at:now,finished_at:null,status:"RUNNING",meters_total:24,meters_written:0,error:null};
   PG.aggregation_run.push(run);
   let written=0,locked=0,errs=[];
   for(const m of PG.utility_meter){
-    const c=cycleTotals(m.meter_code,OCT1,now); if(!c) continue;
+    const c=cycleTotals(m.meter_code,OCT1,to); if(!c) continue;
     const ex=PG.meter_reading.find(r=>r.meter_id===m.meter_id&&r.cycle_id===4);
     try{
       if(ex){ update("meter_reading",ex,{closing_register:Math.round(c.closing*1000)/1000,source_doc_count:c.count,run_id:run.run_id,reading_timestamp:now}); }
@@ -343,21 +347,49 @@ function runAggregation(){
     }catch(e){ locked++; errs.push(e.message); }
   }
   run.status="SUCCEEDED"; run.finished_at=now; run.meters_written=written;
-  log("mg","Aggregated October usage for 24 meters",PIPE_CYCLE.replace("<now>",`ISODate("${new Date(now).toISOString()}")`));
+  log("mg","Aggregated October usage for 24 meters",PIPE_CYCLE.replace("<now>",`ISODate("${new Date(to).toISOString()}")`));
   log("pg",`Bridge wrote ${written} meter readings${locked?`, ${locked} locked because already invoiced`:""}`,`INSERT INTO meter_reading (meter_id, cycle_id, run_id, opening_register, closing_register, source_doc_count)\nVALUES ($1, 4, '${run.run_id.slice(0,8)}…', $2, $3, $4)\nON CONFLICT (meter_id, cycle_id) DO UPDATE\n  SET closing_register = EXCLUDED.closing_register, run_id = EXCLUDED.run_id;\n-- trigger trg_reading_locked blocks the update once a cycle is invoiced`,{err:locked?errs[0]:null});
+  return {written,locked,errs};
+}
+function runAggregation(){
+  const {written,locked,errs}=aggregateOctober();
   SESSION.sel.billRes=`<div class="${locked?"errbox":"okbox"}">${locked?esc(`${written} readings written, ${locked} rejected.\n${errs[0]}`):`Aggregation run finished: ${written} meter readings written or refreshed. Running it again only refreshes the same rows (UNIQUE (meter_id, cycle_id)).`}</div>`;
   render();
 }
-function generateInvoices(){
-  let created=0,existed=0,errs=[];
+function invoiceOctober(){
+  let created=[],existed=0,errs=[];
   for(const p of PG.property){
-    try{ const r=spGenerateInvoice(p.property_id,4); r.created?created++:existed++; }catch(e){ errs.push(e.message); }
+    try{ const r=spGenerateInvoice(p.property_id,4); r.created?created.push(r.created):existed++; }catch(e){ errs.push(e.message); }
   }
-  log("pg",`sp_generate_invoice: ${created} created, ${existed} already existed${errs.length?`, ${errs.length} rolled back`:""}`,`CALL sp_generate_invoice(property_id, 4);  -- × 8 properties`,{err:errs[0]||null});
-  SESSION.sel.billRes=errs.length?`<div class="errbox">${esc(errs[0])}\n\nRun the aggregation first so every meter has an October reading.</div>`:`<div class="okbox">${created} invoices created, ${existed} already existed and were returned unchanged.${existed&&!created?" Nothing was duplicated: UNIQUE (property_id, cycle_id) plus the procedure's existence check.":""}</div>`;
+  log("pg",`sp_generate_invoice: ${created.length} created, ${existed} already existed${errs.length?`, ${errs.length} rolled back`:""}`,`CALL sp_generate_invoice(property_id, 4);  -- × 8 properties`,{err:errs[0]||null});
+  return {created,existed,errs};
+}
+function generateInvoices(){
+  const {created,existed,errs}=invoiceOctober();
+  SESSION.sel.billRes=errs.length?`<div class="errbox">${esc(errs[0])}\n\nRun the aggregation first so every meter has an October reading.</div>`:`<div class="okbox">${created.length} invoices created, ${existed} already existed and were returned unchanged.${existed&&!created.length?" Nothing was duplicated: UNIQUE (property_id, cycle_id) plus the procedure's existence check.":""}</div>`;
   render();
 }
-
+// "Jump to month end": meters run to midnight on 1 November, then the nightly billing job closes October
+function monthEnd(){
+  if(now>=NOV1) return;
+  fastForwardTo(NOV1);
+  const agg=aggregateOctober(), inv=invoiceOctober();
+  const oct=PG.billing_cycle.find(c=>c.cycle_id===4);
+  if(oct.status!=="CLOSED"){ update("billing_cycle",oct,{status:"CLOSED"});
+    log("pg","October cycle closed",`UPDATE billing_cycle SET status = 'CLOSED' WHERE cycle_id = 4;`); }
+  if(!PG.billing_cycle.some(c=>c.cycle_id===5)){
+    insert("billing_cycle",{cycle_id:5,year:2026,month:11,cycle_start_date:"2026-11-01",cycle_end_date:"2026-11-30",due_date:"2026-12-30",late_penalty_percent:5,status:"OPEN"});
+    log("pg","November cycle opened",`INSERT INTO billing_cycle (year, month, cycle_start_date, cycle_end_date, due_date)\nVALUES (2026, 11, '2026-11-01', '2026-11-30', '2026-12-30');`); }
+  for(const i of inv.created){
+    const p=propById(i.property_id), owner=PG.app_user.find(u=>u.resident_id===p.resident_id); if(!owner) continue;
+    MG.notifications.push({_id:"n"+(MG.notifications.length+1),user_id:owner.user_id,kind:"BILL",title:`October bill ready for ${p.property_code}`,body:`${i.invoice_no}: ${inr(i.total_amount)}, due ${fmtD(oct.due_date)}. Open Bills & payments to see the slabs and pay.`,created_at:now,read_at:null});
+  }
+  if(inv.created.length) log("mg",`Bill alerts sent for ${inv.created.length} invoices`,`db.notifications.insertMany([ { kind: "BILL", title: "October bill ready for P-…" }, … ])`);
+  SESSION.sel.billRes=`<div class="${inv.errs.length||agg.locked?"errbox":"okbox"}">${inv.created.length?`Nightly job at ${fmtDT(now)}: ${agg.written} meter readings written, ${inv.created.length} October invoices created${inv.existed?`, ${inv.existed} already existed`:""}. Residents have a bill alert.`:esc(`October was already invoiced earlier, so no new bills were made.${agg.locked?`\n${agg.errs[0]}`:""}`)}</div>`;
+  if(typeof Sync!=="undefined") Sync.changed();
+  toast(inv.created.length?`October closed: ${inv.created.length} new bills issued`:"October was already billed; nothing new");
+  render();
+}
 V.tix=()=>{
   const ts=PG.maintenance_ticket.slice().sort((a,b)=>b.reported_timestamp-a.reported_timestamp);
   const sel=ts.find(t=>t.ticket_id===SESSION.sel.tk)||ts[0];
@@ -522,6 +554,7 @@ document.addEventListener("click",e=>{
   if(a==="pick"){ SESSION.pick=b.dataset.email; renderLogin(); return; }
   if(a==="sim-toggle"){ setRunning(!SIM.running); log("mg",SIM.running?"Simulator resumed":"Simulator paused",null); return; }
   if(a==="ff"){ for(let i=0;i<4;i++) tick(); render(); return; }
+  if(a==="month-end"){ toast("Running the meters to midnight on 1 November…"); setTimeout(monthEnd,30); return; }
   if(a==="logout"){ logout(); return; }
   if(a==="go"){ SESSION.view=b.dataset.view; SESSION.sel.billRes=null; render(); window.scrollTo(0,0); return; }
   if(a==="sel-prop"){ SESSION.sel.prop=b.dataset.id; render(); return; }

@@ -20,6 +20,7 @@ const IST={timeZone:"Asia/Kolkata"};
 const HOUR=3600e3, TICK_MIN=15, TICK=TICK_MIN*60e3;
 const SIM_START=Date.parse("2026-10-25T08:00:00+05:30");
 const OCT1=Date.parse("2026-10-01T00:00:00+05:30");
+const NOV1=Date.parse("2026-11-01T00:00:00+05:30"); // October cycle closes here
 let now=SIM_START;
 const fmtT=t=>new Date(t).toLocaleTimeString("en-IN",{...IST,hour:"2-digit",minute:"2-digit",hour12:false});
 const fmtDT=t=>new Date(t).toLocaleString("en-IN",{...IST,day:"numeric",month:"short",hour:"2-digit",minute:"2-digit",hour12:false});

@@ -89,6 +89,8 @@ const Sync=(()=>{
     // simulator asks before each automatic tick
     drivesClock:()=>mode==="off"||(mode==="on"&&driver),
     ticked(){ if(mode==="on"){ dirty=dirty||"tick"; run(poll); } },
+    // a change made outside a click handler (e.g. the month-end job) that every laptop must show
+    changed(){ if(mode==="on"){ dirty="user"; run(poll); } },
     badge(){
       if(mode==="on") return `<span class="pill" style="color:var(--ok)" title="Data is shared through server.js. ${driver?"This laptop runs the meter clock.":"Another laptop runs the meter clock."}">Live · ${clients} ${clients===1?"browser":"browsers"}</span>`;
       if(mode==="lost") return `<span class="pill" style="color:var(--crit)" title="Cannot reach server.js. Changes here are not shared until it is back.">Offline · reconnecting</span>`;

@@ -89,7 +89,7 @@ Every account uses the password **`demo123`**.
 | Staff (South District) | `kavya.staff@city.example.test` | Ticket queue for South District |
 | Admin | `admin@city.example.test` | City operations, disaster simulator, billing run, database rules, SQL lab |
 
-The top bar has **Pause meters** and **+1 hour** (skips 4 readings) to speed up the demo. One tick is 2 real seconds and 15 city minutes.
+The top bar has **Pause meters**, **+1 hour** (skips 4 readings) and **Jump to month end** to speed up the demo. Jump to month end runs the meters to midnight on 1 November, then the nightly job aggregates October, issues one bill per property, opens the November cycle and sends each resident a bill alert. It works once per run; `npm run reset` (or reloading the static page) starts October again. One tick is 2 real seconds and 15 city minutes.
 
 ## Demo script (about 8 minutes)
 
@@ -98,7 +98,7 @@ The top bar has **Pause meters** and **+1 hour** (skips 4 readings) to speed up 
 3. Pay with *Send the same request twice*: one payment row, the invoice becomes PAID. Set the outcome to *Decline* on another bill: the attempt is stored, the bill stays unpaid.
 4. **Admin → Disaster simulator → Pipe burst**, then press **+1 hour**: a CRITICAL leak ticket appears with the reason it fired; later readings raise its count instead of creating duplicates.
 5. **Ravi:** take the ticket, try *Try to close directly* (a trigger blocks it), add a note (MongoDB), resolve it. The leak stops.
-6. **Admin → Billing run:** run the aggregation, generate invoices, then generate again: nothing is duplicated.
+6. **Admin → Billing run → Jump to month end:** October closes and 8 new bills appear. On the other laptop, Asha's **Bills & payments** shows her October bills at the top within a second. Press **Generate invoices** again: nothing is duplicated; **Run aggregation** again: READING_LOCKED.
 7. **Admin → Database rules** and **SQL lab:** watch bad data get rejected, and run the recursive, correlated, JOIN, CTE and window-function queries.
 
 ## Project structure

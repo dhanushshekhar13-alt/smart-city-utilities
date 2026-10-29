@@ -114,6 +114,18 @@ function tick(){
   detect();
   render(true);
 }
+// fast-forward the meters to midnight on 1 November, one 15-minute reading at a time
+function fastForwardTo(t){
+  const from=now; let n=0;
+  while(now<t){
+    now+=TICK;
+    const docs=PG.utility_meter.filter(m=>!SIM.offline.has(m.meter_code)).map(m=>makeReading(m,now));
+    mongoInsert(docs); detect(); n+=docs.length;
+  }
+  retention();
+  log("mg",`Smart meters reported ${n.toLocaleString("en-IN")} readings (${fmtDT(from)} → ${fmtDT(now)})`,`db.meter_readings.insertMany([ …${n} docs, one per meter every 15 min… ], { ordered: false })`);
+  return n;
+}
 function stripDoc(d){ const o={}; for(const k in d){ if(!k.startsWith("_")||k==="_id") o[k]=k==="ts"?`ISODate("${new Date(d.ts).toISOString()}")`:d[k]; } return o; }
 function setRunning(on){ SIM.running=on; clearInterval(SIM.timer); if(on) SIM.timer=setInterval(autoTick,2000); renderTop(); }
 // with shared data (server.js) only one browser drives the clock; see js/sync.js
