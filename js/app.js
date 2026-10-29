@@ -71,7 +71,7 @@ document.addEventListener("pointermove",e=>{
 function renderTop(){
   const u=SESSION.user;
   $("#top").innerHTML=`<div class="brand"><div class="brand-mark" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M9 1 3 9h4l-1 6 6-8H8z" fill="var(--accent-ink)"/></svg></div>
-    <div><div class="brand-name">Smart City Utilities</div></div><span class="pill">Prototype · synthetic data</span></div>
+    <div><div class="brand-name">Smart City Utilities</div></div><span class="pill">Prototype · synthetic data</span>${typeof Sync!=="undefined"?Sync.badge():""}</div>
     <div class="spacer"></div>
     <div class="clock"><span class="time" title="Simulated city clock (1 tick = 15 min)">City time ${fmtDT(now)}</span>
       <button class="btn small" data-act="sim-toggle">${SIM.running?"Pause meters":"Resume meters"}</button>

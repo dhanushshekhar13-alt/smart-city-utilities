@@ -4,7 +4,8 @@
   "private": true,
   "description": "Smart City Utilities & Infrastructure Management System: browser prototype (DBMS mini-project)",
   "scripts": {
-    "start": "npx --yes serve@14.2.4 -l 8080 .",
+    "start": "node server.js",
+    "reset": "node server.js --reset",
     "serve:python": "python3 -m http.server 8080"
   }
 }

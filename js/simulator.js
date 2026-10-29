@@ -115,7 +115,9 @@ function tick(){
   render(true);
 }
 function stripDoc(d){ const o={}; for(const k in d){ if(!k.startsWith("_")||k==="_id") o[k]=k==="ts"?`ISODate("${new Date(d.ts).toISOString()}")`:d[k]; } return o; }
-function setRunning(on){ SIM.running=on; clearInterval(SIM.timer); if(on) SIM.timer=setInterval(tick,2000); renderTop(); }
+function setRunning(on){ SIM.running=on; clearInterval(SIM.timer); if(on) SIM.timer=setInterval(autoTick,2000); renderTop(); }
+// with shared data (server.js) only one browser drives the clock; see js/sync.js
+function autoTick(){ if(typeof Sync==="undefined"||Sync.drivesClock()){ tick(); if(typeof Sync!=="undefined") Sync.ticked(); } }
 
 // ---------- MongoDB aggregations used by the screens ----------
 function seriesFor(code,hours=24){ // 15-min points: kW, L/min or m³/h
