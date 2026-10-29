@@ -89,7 +89,7 @@ Every account uses the password **`demo123`**.
 | Staff (South District) | `kavya.staff@city.example.test` | Ticket queue for South District |
 | Admin | `admin@city.example.test` | City operations, disaster simulator, billing run, database rules, SQL lab |
 
-The top bar has **Pause meters**, **+1 hour** (skips 4 readings) and **Jump to month end** to speed up the demo. Jump to month end runs the meters to midnight on 1 November, then the nightly job aggregates October, issues one bill per property, opens the November cycle and sends each resident a bill alert. It works once per run; `npm run reset` (or reloading the static page) starts October again. One tick is 2 real seconds and 15 city minutes.
+The top bar has **Pause meters**, **+1 hour** (skips 4 readings) and **Jump to month end** to speed up the demo. Jump to month end runs the meters to midnight on 1 November, then the nightly job aggregates October, issues one bill per property, opens the November cycle and sends each resident a bill alert. If you skip ahead with **+1 hour** instead, the same job runs on its own when the clock passes midnight. It works once per run; `npm run reset` (or reloading the static page) starts October again. One tick is 2 real seconds and 15 city minutes.
 
 ## Demo script (about 8 minutes)
 

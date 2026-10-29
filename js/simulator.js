@@ -112,6 +112,7 @@ function tick(){
   mongoInsert(docs); retention();
   log("mg",`Smart meters reported ${docs.length} readings`,`db.meter_readings.insertMany([ …${docs.length} docs… ], { ordered: false })\n// e.g. ${JSON.stringify(stripDoc(docs.find(d=>d.meta.utility==="WATER")||docs[0]))}`,{collapse:"ingest"});
   detect();
+  if(now>=NOV1&&octoberOpen()) return closeOctober(); // the clock just crossed month end
   render(true);
 }
 // fast-forward the meters to midnight on 1 November, one 15-minute reading at a time

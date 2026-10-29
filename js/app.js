@@ -373,6 +373,11 @@ function generateInvoices(){
 function monthEnd(){
   if(now>=NOV1) return;
   fastForwardTo(NOV1);
+  closeOctober();
+}
+const octoberOpen=()=>PG.billing_cycle.find(c=>c.cycle_id===4).status!=="CLOSED";
+// nightly billing job; also runs on its own when the clock passes midnight on 1 November (+1 hour or the live clock)
+function closeOctober(){
   const agg=aggregateOctober(), inv=invoiceOctober();
   const oct=PG.billing_cycle.find(c=>c.cycle_id===4);
   if(oct.status!=="CLOSED"){ update("billing_cycle",oct,{status:"CLOSED"});
