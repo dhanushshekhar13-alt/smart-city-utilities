@@ -555,12 +555,32 @@ function renderNav(){
 }
 function renderLogin(){
   const pick=SESSION.pick||PG.app_user[0].email;
+  const ini=n=>n.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
+  const roleOf=u=>u.role==="RESIDENT"?"Resident":u.role==="STAFF"?"Staff · "+zname(u.staff_zone_id):"City admin";
   app.innerHTML=`<header class="topbar" id="top"></header><div class="login">
-   <div class="page-head"><span class="eyebrow">DBMS mini-project prototype · Dhanush &amp; Gagan</span><h1>Smart City Utilities &amp; Infrastructure Management</h1>
-   <p class="ink2" style="max-width:68ch">A city's electricity, water and gas, run on two databases. PostgreSQL keeps people, bills and payments correct. MongoDB stores every smart-meter reading. Sign in as any of the demo users to see what each role gets.</p></div>
-   ${V.how().replace(/^<div class="page-head">[\s\S]*?<\/div>/,"")}
-   <div class="panel stack"><h2>Sign in</h2><div class="users" role="group" aria-label="Demo users">${PG.app_user.map(u=>`<button class="ucard" aria-pressed="${u.email===pick}" data-act="pick" data-email="${u.email}"><span class="role-tag">${u.role==="RESIDENT"?"Resident":u.role==="STAFF"?"Staff · "+esc(zname(u.staff_zone_id)):"Admin"}</span><b>${esc(u.display)}</b><span class="muted mono" style="font-size:11.5px">${esc(u.email)}</span></button>`).join("")}</div>
-   <form id="login-form" class="row" style="align-items:end"><label class="f">Email<input class="in" id="lg-email" value="${esc(pick)}" autocomplete="username"></label><label class="f">Password<input class="in" id="lg-pass" type="password" value="demo123" autocomplete="current-password"></label><button class="btn primary" type="submit">Sign in</button><span class="muted">Demo password for everyone: demo123</span></form><div id="lg-err"></div></div></div>`;
+   <section class="login-hero">
+    <span class="eyebrow">DBMS mini-project · Dhanush &amp; Gagan</span>
+    <h1>Smart City Utilities &amp; Infrastructure Management</h1>
+    <p>Electricity, water and gas for a whole city on one platform. Smart meters report every 15 minutes, faults raise repair tickets on their own, and every bill is worked out from real readings.</p>
+    <ul class="login-feats">
+     <li><span class="feat-ic" style="--c:var(--elec)">⚡</span><div><b>Live smart meters</b><span>Readings stream into MongoDB as time series</span></div></li>
+     <li><span class="feat-ic" style="--c:var(--crit)">!</span><div><b>Automatic fault detection</b><span>Leaks, spikes and outages become tickets and alerts</span></div></li>
+     <li><span class="feat-ic" style="--c:var(--water)">₹</span><div><b>Fair tiered billing</b><span>PostgreSQL turns a month of usage into one exact bill</span></div></li>
+    </ul>
+    <div class="login-dbs"><span class="src pg">PostgreSQL</span><span class="src mg">MongoDB</span><span class="muted">Synthetic data only</span></div>
+   </section>
+   <section class="login-card" aria-labelledby="lg-title">
+    <h2 id="lg-title">Sign in</h2><p class="muted">Welcome back. Use your city account.</p>
+    <form id="login-form" class="stack">
+     <label class="f">Email<input class="in" id="lg-email" type="email" value="${esc(pick)}" autocomplete="username"></label>
+     <label class="f">Password<input class="in" id="lg-pass" type="password" value="demo123" autocomplete="current-password"></label>
+     <button class="btn primary lg" type="submit">Sign in</button>
+    </form>
+    <div id="lg-err"></div>
+    <div class="login-sep"><span>or pick a demo account</span></div>
+    <div class="users" role="group" aria-label="Demo accounts">${PG.app_user.map(u=>`<button class="ucard" aria-pressed="${u.email===pick}" data-act="pick" data-email="${u.email}"><span class="avatar r-${u.role.toLowerCase()}">${esc(ini(u.display))}</span><span class="ucard-t"><b>${esc(u.display)}</b><span class="muted">${esc(roleOf(u))}</span></span></button>`).join("")}</div>
+    <p class="muted" style="font-size:12px;margin:0">Every demo account uses the password <span class="mono">demo123</span>.</p>
+   </section></div>`;
   renderTop();
 }
 
