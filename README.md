@@ -54,7 +54,7 @@ Only **one** laptop runs the server (the host). The other laptop (the friend) on
    - **Linux:** run `hostname -I`.
 3. **Allow the connection** the first time. Windows shows a Windows Defender Firewall prompt for Node.js: tick **Private networks** and press **Allow access**. macOS may ask whether node may accept incoming connections: press **Allow**.
 4. **Friend:** open `http://<host-IP>:8080` in a browser, for example `http://192.168.1.23:8080`. No clone or install is needed on the friend's laptop.
-5. Sign in on both laptops (for example Asha on one and Ravi on the other). A complaint Asha files appears in Ravi's queue; a bill paid on one laptop shows as PAID on the other; **Pause meters** pauses the city for both.
+5. Sign in on both laptops (for example Asha on one and Ravi on the other). A complaint Asha files appears in Ravi's queue; a bill paid on one laptop shows as PAID on the other; **Pause clock** pauses the city for both.
 
 Keep the host's terminal open; closing it (or `Ctrl + C`) stops sharing. If the friend's top bar says **Offline · reconnecting**, the host's server has stopped or the laptops lost the network.
 
@@ -89,7 +89,9 @@ Every account uses the password **`demo123`**.
 | Staff (South District) | `kavya.staff@city.example.test` | Ticket queue for South District |
 | Admin | `admin@city.example.test` | City operations, disaster simulator, billing run, database rules, SQL lab |
 
-The top bar has **Pause meters**, **+1 hour** (skips 4 readings) and **Jump to month end** to speed up the demo. Jump to month end runs the meters to midnight on 1 November, then the nightly job aggregates October, issues one bill per property, opens the November cycle and sends each resident a bill alert. If you skip ahead with **+1 hour** instead, the same job runs on its own when the clock passes midnight. It works once per run; `npm run reset` (or reloading the static page) starts October again. One tick is 2 real seconds and 15 city minutes.
+The top bar has **Pause clock**, **+1 hour** (skips 4 readings) and **Jump to month end** to speed up the demo. Jump to month end runs the meters to midnight on 1 November, then the nightly job aggregates October, issues one bill per property, opens the November cycle and sends each resident a bill alert. If you skip ahead with **+1 hour** instead, the same job runs on its own when the clock passes midnight. It works once per run; `npm run reset` (or reloading the static page) starts October again. One tick is 2 real seconds and 15 city minutes.
+
+To stop one home's usage without stopping the city, use **Turn off** next to a utility: on a resident's dashboard (Live usage panel) or for any home in **Admin → Disaster simulator → Switch a home's supply on or off**. The meter keeps reporting every 15 city-minutes with a usage of 0, so the clock keeps running and the bill counts only what was used while the supply was on. **Pause clock** in the top bar still stops the whole city.
 
 ## Demo script (about 8 minutes)
 

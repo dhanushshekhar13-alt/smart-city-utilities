@@ -16,6 +16,7 @@ function makeReading(m,t){
   let rate=profile(m,t);
   if(mode==="BURST") rate=rand(13.5,15.5);
   if(mode==="SPIKE") rate=rand(8.5,10.5);
+  if(mode==="OFF") rate=0; // supply switched off: the meter keeps reporting, usage stays at zero
   // advance the cumulative register by 15 minutes of use
   const inc=m.utility_type==="ELECTRICITY"?rate*TICK_MIN/60:m.utility_type==="WATER"?rate*TICK_MIN/1000:rate*TICK_MIN/60;
   const reg=Math.round((register.get(m.meter_code)+inc)*1000)/1000; register.set(m.meter_code,reg);
@@ -53,7 +54,7 @@ MG.ingestion_batches.push({_id:"backfill-seed-42",seed:42,meters:24,count:24*192
 // ---------- anomaly detection (explainable rules) ----------
 const RULES={LEAK:{min_flow:2,window_ticks:4},SPIKE:{factor:3,min_kw:3},MISSING:{ticks:3}};
 function lastN(code,n){ const a=byMeter.get(code)||[]; return a.slice(Math.max(1,a.length-n)); }
-function baselineKW(code){ const a=(byMeter.get(code)||[]).filter(d=>!d._opening&&d.ts<now-HOUR&&d.ts>=now-25*HOUR); if(!a.length) return 0.6; return a.reduce((s,d)=>s+d._rate,0)/a.length; }
+function baselineKW(code){ const a=(byMeter.get(code)||[]).filter(d=>!d._opening&&d.ts<now-HOUR&&d.ts>=now-25*HOUR); if(!a.length) return 0.6; return Math.max(0.1,a.reduce((s,d)=>s+d._rate,0)/a.length); } // floor: a meter that was switched off has no baseline
 function detect(){
   for(const m of PG.utility_meter){
     const arr=byMeter.get(m.meter_code); const last=arr[arr.length-1];

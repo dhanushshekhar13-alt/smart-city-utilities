@@ -74,7 +74,7 @@ function renderTop(){
     <div><div class="brand-name">Smart City Utilities</div></div><span class="pill">Prototype · synthetic data</span>${typeof Sync!=="undefined"?Sync.badge():""}</div>
     <div class="spacer"></div>
     <div class="clock"><span class="time" title="Simulated city clock (1 tick = 15 min)">City time ${fmtDT(now)}</span>
-      <button class="btn small" data-act="sim-toggle">${SIM.running?"Pause meters":"Resume meters"}</button>
+      <button class="btn small" data-act="sim-toggle">${SIM.running?"Pause clock":"Resume clock"}</button>
       <button class="btn small" data-act="ff" title="Advance one simulated hour">+1 hour</button>
       ${now<NOV1?`<button class="btn small" data-act="month-end" title="Run the meters to midnight on 1 November, then close October and send the bills">Jump to month end</button>`:""}</div>
     ${u?`<div class="row"><span class="ink2">${esc(u.display)}</span><button class="btn small" data-act="logout">Switch user</button></div>`:""}`;
@@ -135,7 +135,7 @@ V.home=()=>{
    </div></div>
   <div class="panel"><div class="panel-head"><div class="row"><h2>Live usage, last 24 hours</h2>${src("mg")}</div>
      <div class="tabs" role="group" aria-label="Utility">${Object.keys(UT).map(k=>`<button aria-pressed="${k===ut}" data-act="sel-ut" data-ut="${k}"><span class="dot" style="background:${UT[k].color}"></span>${UT[k].label}</button>`).join("")}</div></div>
-   <p class="ink2" style="margin-bottom:8px">Right now: <b class="num">${last?n2(last.v):"–"} ${UT[ut].rate}</b> · meter <span class="mono">${m.meter_code}</span> · last reading ${last?fmtT(last.t):"–"}${SIM.offline.has(m.meter_code)?` · ${badge("OVERDUE","offline")}`:""}</p>
+   <p class="ink2" style="margin-bottom:8px">Right now: <b class="num">${last?n2(last.v):"–"} ${UT[ut].rate}</b> · meter <span class="mono">${m.meter_code}</span> · last reading ${last?fmtT(last.t):"–"}${SIM.offline.has(m.meter_code)?` · ${badge("OVERDUE","offline")}`:""}${isOff(m.meter_code)?` · ${badge("CLOSED","switched off")}`:""} · ${supplyBtn(m.meter_code,true)}</p>
    ${chart("c-home",pts,{color:UT[ut].color,unit:UT[ut].rate})}
    <p class="muted" style="font-size:12px;margin-top:6px">Query: <code>db.meter_readings.find({ "meta.meter_code": "${m.meter_code}", ts: { $gte: now − 24h } }).sort({ ts: 1 })</code>, served by the index on (meta.meter_code, ts).</p></div>`;
 };
@@ -292,6 +292,10 @@ V.scen=()=>{
   <div class="grid3">${sc.map(s=>`<div class="panel stack"><div class="row" style="justify-content:space-between"><h2>${s.title}</h2>${on(s)?`<span class="status s-crit">running</span>`:`<span class="status s-mute">idle</span>`}</div>
     <p class="mono" style="font-size:12px">${s.where}</p><p class="ink2">${s.what}</p>
     <div class="row">${on(s)?`<button class="btn" data-act="scen-stop" data-id="${s.id}">Restore normal</button>`:`<button class="btn primary" data-act="scen-start" data-id="${s.id}">Start ${s.title.toLowerCase()}</button>`}</div></div>`).join("")}</div>
+  <div class="panel"><div class="panel-head"><h2>Switch a home's supply on or off</h2>${src("mg")}</div>
+   <p class="ink2" style="margin-bottom:8px">For a home that is empty or disconnected. The meter keeps reporting every 15 city-minutes, but its usage reads 0, so the bill only counts what was used while it was on. The city clock keeps running. This is different from an outage, where meters stop reporting.</p>
+   <div class="tablewrap"><table><thead><tr><th>Property</th><th>Zone</th>${Object.keys(UT).map(k=>`<th>${UT[k].label}</th>`).join("")}</tr></thead><tbody>
+   ${PG.property.map(p=>`<tr><td><span class="mono">${esc(p.property_code)}</span> ${esc(p.address_line.split(",")[0])}</td><td>${esc(zname(p.zone_id))}</td>${Object.keys(UT).map(k=>{const mm=metersOf(p.property_id).find(x=>x.utility_type===k);return `<td>${isOff(mm.meter_code)?badge("CLOSED","off"):badge("PAID","on")} ${supplyBtn(mm.meter_code,true)}</td>`;}).join("")}</tr>`).join("")}</tbody></table></div></div>
   <div class="panel"><div class="panel-head"><h2>Detection rules</h2><span class="muted">Thresholds are configuration, shown so the reason for every ticket can be explained</span></div><div class="tablewrap"><table>
    <thead><tr><th>Rule</th><th>Fires when</th><th>Severity</th><th>Duplicate handling</th></tr></thead><tbody>
    <tr><td><b>Leak</b></td><td>Water flow above ${RULES.LEAK.min_flow} L/min for ${RULES.LEAK.window_ticks} readings in a row (${RULES.LEAK.window_ticks*TICK_MIN} min)</td><td>${sev("CRITICAL")}</td><td rowspan="3">One active ticket per <code>anomaly_key</code> (e.g. LEAK:MTR-W-0001), enforced by a partial unique index; repeats raise <code>occurrence_count</code></td></tr>
@@ -299,6 +303,14 @@ V.scen=()=>{
    <tr><td><b>Missing data</b></td><td>No reading from a property&#39;s meters for ${RULES.MISSING.ticks*TICK_MIN}+ min (one ticket per property)</td><td>${sev("MEDIUM")}</td></tr>
    </tbody></table></div></div>`;
 };
+const isOff=code=>SIM.mode[code]==="OFF";
+function setSupply(code,on){
+  const m=meterByCode(code), p=propById(m.property_id), label=UT[m.utility_type].label.toLowerCase();
+  if(on) delete SIM.mode[code]; else SIM.mode[code]="OFF";
+  log("mg",`${p.property_code} ${label} ${on?"switched back on":"switched off (usage 0, meter still reporting)"}`,`// simulator config\nsim.mode["${code}"] = ${on?"null":'"OFF"'}\n// readings keep arriving every 15 min with ${m.utility_type==="ELECTRICITY"?"current: 0":m.utility_type==="WATER"?"flow_lpm: 0":"flow 0 m³/h"}`);
+  render();
+}
+const supplyBtn=(code,small)=>`<button class="btn${small?" small":""}" data-act="supply" data-code="${code}" data-on="${isOff(code)}" aria-pressed="${!isOff(code)}">${isOff(code)?"Turn on":"Turn off"}</button>`;
 function scenario(id,start){
   const set=(code,mode)=>{ if(mode) SIM.mode[code]=mode; else delete SIM.mode[code]; };
   if(id==="burst"){ set("MTR-W-0001",start?"BURST":null); log("mg",start?"Scenario started: pipe burst at P-0001":"Scenario ended: P-0001 water back to normal",`// simulator config\nsim.mode["MTR-W-0001"] = ${start?'"BURST"':"null"}`); }
@@ -557,7 +569,7 @@ document.addEventListener("click",e=>{
   const b=e.target.closest("[data-act]"); if(!b) return;
   const a=b.dataset.act, u=SESSION.user;
   if(a==="pick"){ SESSION.pick=b.dataset.email; renderLogin(); return; }
-  if(a==="sim-toggle"){ setRunning(!SIM.running); log("mg",SIM.running?"Simulator resumed":"Simulator paused",null); return; }
+  if(a==="sim-toggle"){ setRunning(!SIM.running); log("mg",SIM.running?"City clock resumed":"City clock paused",null); return; }
   if(a==="ff"){ for(let i=0;i<4;i++) tick(); render(); return; }
   if(a==="month-end"){ toast("Running the meters to midnight on 1 November…"); setTimeout(monthEnd,30); return; }
   if(a==="logout"){ logout(); return; }
@@ -602,6 +614,7 @@ document.addEventListener("click",e=>{
     return; }
   if(a==="note-del"){ const lg=MG.maintenance_logs.find(l=>l.ticket_no===b.dataset.tk); const i=+b.dataset.i; const e1=lg.entries[i]; lg.entries.splice(i,1);
     log("mg","Field note deleted",`db.maintenance_logs.updateOne({ ticket_no: "${lg.ticket_no}" },\n  { $pull: { entries: { by: "${e1.by}", at: ISODate("${new Date(e1.at).toISOString()}") } } })`); render(); return; }
+  if(a==="supply"){ setSupply(b.dataset.code,b.dataset.on==="true"); toast(b.dataset.on==="true"?"Supply back on. Usage returns on the next reading.":"Supply off. Usage reads 0 from the next reading; the city clock keeps running."); return; }
   if(a==="scen-start"||a==="scen-stop"){ scenario(b.dataset.id,a==="scen-start"); toast(a==="scen-start"?"Scenario running. Press +1 hour to let the detector see it.":"Back to normal readings."); return; }
   if(a==="agg"){ runAggregation(); return; }
   if(a==="gen"){ generateInvoices(); return; }
