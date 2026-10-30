@@ -129,7 +129,7 @@ docs/viva/            Viva question bank (Markdown and PDF)
 - **MongoDB collections:** `meter_readings` (time-series), `anomaly_events`, `maintenance_logs`, `notifications`, `ingestion_batches`.
 - **Rules shown in the app:** CHECK, UNIQUE, partial unique indexes, an EXCLUDE constraint on tariff dates, six triggers, idempotent payments, and RLS for three roles (`resident_role`, `staff_role`, `admin_role`).
 
-Full details: [`docs/design/er-diagram-and-schema.pdf`](docs/design/er-diagram-and-schema.pdf) and [`docs/design/project-plan.pdf`](docs/design/project-plan.pdf).
+Chen-notation ER diagram: [`docs/design/er-diagram-chen.pdf`](docs/design/er-diagram-chen.pdf) (also [PNG](docs/design/er-diagram-chen.png) and [SVG](docs/design/er-diagram-chen.svg)). Full details: [`docs/design/er-diagram-and-schema.pdf`](docs/design/er-diagram-and-schema.pdf) and [`docs/design/project-plan.pdf`](docs/design/project-plan.pdf).
 
 ## Limitations of this version
 
