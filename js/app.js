@@ -4,7 +4,7 @@
 // ---------- session / navigation ----------
 const SESSION={user:null,view:null,sel:{}};
 const NAV={
-  RESIDENT:[["home","My dashboard"],["bills","Bills & payments"],["tickets","Complaints"],["alerts","Alerts"],["db","Inside the databases"],["how","How it works"]],
+  RESIDENT:[["home","My dashboard"],["bills","Bills & payments"],["eco","Footprint & savings"],["tickets","Complaints"],["alerts","Alerts"],["db","Inside the databases"],["how","How it works"]],
   STAFF:[["queue","Ticket queue"],["db","Inside the databases"],["how","How it works"]],
   ADMIN:[["ops","City operations"],["scen","Disaster simulator"],["billing","Billing run"],["tix","All tickets"],["rules","Database rules"],["sql","SQL lab"],["db","Inside the databases"],["how","How it works"]],
 };
@@ -181,6 +181,7 @@ V.home=()=>{
       <tr><th>Property</th><td class="mono">${esc(p.property_code)} · ${esc(p.property_type.toLowerCase())} · ${p.square_feet} sq ft</td></tr>
       <tr><th>Zone</th><td>${esc(zname(p.zone_id))}, ${esc(zname(districtOf(p.zone_id)))}</td></tr>
       <tr><th>Service</th><td>${badge(p.service_status)}</td></tr>
+      <tr><th>Eco score</th><td>${(er=>`${gradeChip(er)} <span class="num">${er.score}/100</span> · <button class="btn small" data-act="go" data-view="eco">See footprint &amp; savings</button>`)(ecoReport(pid))}</td></tr>
       <tr><th>Meters</th><td>${metersOf(pid).map(x=>`<span class="mono">${x.meter_code}</span>`).join(", ")}</td></tr>
      </tbody></table></div></div>
    <div class="kpis" style="align-content:start">
