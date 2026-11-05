@@ -31,7 +31,7 @@ function mapSvg(sel){
    ${PG.property.map(p=>{ const [x,y]=pinXY(p), s=propState(p), on=p.property_id===sel;
      return `<g class="pin ${s.k}${on?" on":""}" data-act="map-sel" data-id="${p.property_id}" tabindex="0" role="button" aria-label="${p.property_code}, ${s.label}">
       ${s.crit?`<circle class="pulse" cx="${x}" cy="${y}" r="16"/>`:""}
-      <circle class="dot" cx="${x}" cy="${y}" r="${on?17:15}" ${s.valve?'stroke-dasharray="4 3"':""}/>
+      <circle class="pdot" cx="${x}" cy="${y}" r="${on?17:15}" ${s.valve?'stroke-dasharray="4 3"':""}/>
       <text class="pico" x="${x}" y="${y+5}" text-anchor="middle">${p.property_type==="COMMERCIAL"?"B":"H"}</text>
       <text class="plab" x="${x}" y="${y+34}" text-anchor="middle">${p.property_code}</text></g>`; }).join("")}
   </svg>`;
@@ -61,9 +61,9 @@ V.map=()=>{
   return `<div class="page-head"><span class="eyebrow">Municipal operations</span><h1>Live city map</h1>
    <p class="ink2">Every property, coloured by its live state. Pins update with each meter batch; click one for its readings, bills and tickets.</p></div>
   <div class="kpis">
-   <div class="kpi"><span class="l">Normal</span><span class="v">${n("ok")}</span><span class="l"><span class="lg ok"></span>no open issues</span></div>
-   <div class="kpi"><span class="l">Open ticket</span><span class="v">${n("warn")}</span><span class="l"><span class="lg warn"></span>being handled</span></div>
-   <div class="kpi"><span class="l">Critical</span><span class="v">${n("crit")}</span><span class="l"><span class="lg crit"></span>leak, outage or spike</span></div>
+   <div class="kpi"><span class="l">Normal</span><span class="v">${n("ok")}</span><span class="l"><span class="lgd ok"></span>no open issues</span></div>
+   <div class="kpi"><span class="l">Open ticket</span><span class="v">${n("warn")}</span><span class="l"><span class="lgd warn"></span>being handled</span></div>
+   <div class="kpi"><span class="l">Critical</span><span class="v">${n("crit")}</span><span class="l"><span class="lgd crit"></span>leak, outage or spike</span></div>
    <div class="kpi"><span class="l">Grid load ${src("mg")}</span><span class="v">${Math.round(gridLoad()/GRID_KW*100)}%</span><span class="l">${n1(gridLoad())} of ${GRID_KW} kW</span></div>
   </div>
   <div class="mapgrid">

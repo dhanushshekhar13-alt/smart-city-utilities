@@ -101,13 +101,14 @@ V.how=()=>`<div class="page-head"><span class="eyebrow">How it works</span><h1>O
    ["Bridge","Monthly usage = closing register − opening register, written to meter_reading.","pg"],
    ["PostgreSQL","Procedures apply tariff slabs, create invoices, record payments; RLS hides other people's rows.","pg"],
    ["Portals","Residents, staff and admins each see a different app built on both databases.","pg"]].map((s,i)=>`<div class="step"><span class="n">${i+1}</span><b>${s[0]}</b><span class="ink2" style="font-size:12.5px">${s[1]}</span>${src(s[2])}</div>`).join("")}</div>
-  <div class="panel"><div class="panel-head"><h2>Demo script (about 8 minutes)</h2></div><ol class="stack" style="margin:0;padding-left:20px">
-   <li><b>Asha (resident)</b>: dashboard shows her property from PostgreSQL next to live meter charts from MongoDB. Open "Bills" and her September bill: 100 × ₹5 + 200 × ₹8 + 150 × ₹12 = ₹3,900 for electricity.</li>
-   <li>Still as Asha: press <b>Try to open Vikram's invoice</b>. Row-level security returns 0 rows.</li>
-   <li>Pay the September bill with <b>Send the same request twice</b>: one payment row, invoice becomes PAID. Try a failed payment on another bill: the attempt is stored, the bill stays unpaid.</li>
-   <li><b>Admin</b> → Disaster simulator → <b>Pipe burst</b> at Asha's home, then press +1 hour. A CRITICAL leak ticket appears with a reason; more readings bump its count instead of making duplicates.</li>
-   <li><b>Ravi (staff, North District)</b>: take the ticket, try the illegal jump to CLOSED (trigger blocks it), add a note (MongoDB), resolve it. The leak stops.</li>
-   <li><b>Admin</b> → Billing run: aggregate October from MongoDB, generate invoices, run it again to show nothing is duplicated.</li>
+  <div class="panel"><div class="panel-head"><h2>Demo script (about 10 minutes)</h2></div><ol class="stack" style="margin:0;padding-left:20px">
+   <li><b>Asha</b>: dashboard shows her property from PostgreSQL, live meters from MongoDB and the <b>October bill forecast</b>. Open <b>Footprint &amp; savings</b> for her carbon footprint, eco score and tips.</li>
+   <li><b>Asha → Bills</b>: the slabs on her September bill (100 × ₹5 + 200 × ₹8 + 150 × ₹12 = ₹3,900), <b>Print or save as PDF</b>, then <b>Try to open Vikram's invoice</b>: row-level security returns 0 rows.</li>
+   <li><b>Admin → City map</b>, then Disaster simulator → <b>Pipe burst</b> and +1 hour. The leak ticket is assigned to Ravi on its own, the smart valve closes, and Asha's pin pulses red.</li>
+   <li><b>Electricity spike</b> and +1 hour: grid load passes 90% and City operations shows the peak demand event.</li>
+   <li><b>Asha → Complaints</b>: a new complaint goes to Neha, who has fewer open jobs than Ravi.</li>
+   <li><b>Ravi</b>: try the illegal jump to CLOSED (trigger blocks it), move to in progress, add a note (MongoDB), resolve. The valve reopens.</li>
+   <li><b>Jump to month end</b>: 8 October bills appear, Asha's unpaid September bill gets a late fee; pay it twice with the same key and only one payment is stored. <b>Admin → Analytics</b> and the CSV export.</li>
    <li><b>Admin</b> → Database rules and SQL lab: watch PostgreSQL reject bad data and run the recursive, correlated and window queries.</li></ol>
    <p class="muted" style="margin-top:10px">This prototype runs entirely in the browser: the two databases are simulated in memory with the same tables, collections and rules as the real design. The real build uses PostgreSQL 17, MongoDB 8 and Next.js.</p></div>`;
 
@@ -323,7 +324,7 @@ function ticketDetail(t,canAct){
      ${canAct?`<form class="stack" id="note-form" data-tk="${t.ticket_no}"><textarea class="in" id="note-text">Crew on site. Main valve isolated; water supply to 12 Lake View Road paused for repair.</textarea><div><button class="btn" type="submit">Add note</button></div></form>`:""}</div></div></div></div>`;
 }
 V.queue=()=>{
-  const u=SESSION.user; const ts=rlsTickets(u).slice().sort((a,b)=>ACTIVE.includes(b.status)-ACTIVE.includes(a.status)||b.reported_timestamp-a.reported_timestamp);
+  const u=SESSION.user; const ts=rlsTickets(u).slice().sort((a,b)=>ACTIVE.includes(b.status)-ACTIVE.includes(a.status)||(b.assigned_to===u.user_id)-(a.assigned_to===u.user_id)||b.reported_timestamp-a.reported_timestamp); // my own jobs first
   const sel=ts.find(t=>t.ticket_id===SESSION.sel.tk)||ts[0];
   return `<div class="page-head"><span class="eyebrow">Maintenance console · ${esc(zname(u.staff_zone_id))}</span><h1>Ticket queue</h1>
    <p class="ink2">Row-level security shows staff only tickets for properties in their district. Kavya (South District) sees a different list.</p></div>
@@ -762,6 +763,7 @@ function renderLogin(){
      <li><span class="feat-ic" style="--c:var(--elec)">⚡</span><div><b>Live smart meters</b><span>Readings stream into MongoDB as time series</span></div></li>
      <li><span class="feat-ic" style="--c:var(--crit)">!</span><div><b>Automatic fault detection</b><span>Leaks, spikes and outages become tickets and alerts</span></div></li>
      <li><span class="feat-ic" style="--c:var(--water)">₹</span><div><b>Fair tiered billing</b><span>PostgreSQL turns a month of usage into one exact bill</span></div></li>
+     <li><span class="feat-ic" style="--c:var(--gas)">↻</span><div><b>A city that reacts</b><span>Valves close on leaks, engineers are dispatched and bills are forecast</span></div></li>
     </ul>
     <div class="login-dbs"><span class="src pg">PostgreSQL</span><span class="src mg">MongoDB</span><span class="muted">Synthetic data only</span></div>
    </section>

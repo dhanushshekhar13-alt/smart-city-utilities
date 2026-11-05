@@ -226,15 +226,15 @@ table.fc td, table.fc th { white-space:nowrap; padding-left:8px; padding-right:8
 .citymap .wlab { fill:var(--ink); font:600 17px var(--f-display); }
 .citymap .dlab { fill:var(--ink-3); font-size:14px; }
 .citymap .pin { cursor:pointer; outline:none; }
-.citymap .pin .dot { stroke:var(--surface); stroke-width:3; transition:r .15s; }
-.citymap .pin.ok .dot { fill:var(--ok); } .citymap .pin.warn .dot { fill:var(--warn); } .citymap .pin.crit .dot { fill:var(--crit); } .citymap .pin.off .dot { fill:var(--ink-3); }
-.citymap .pin.on .dot, .citymap .pin:focus-visible .dot { stroke:var(--ink); }
+.citymap .pin .pdot { stroke:var(--surface); stroke-width:3; transition:r .15s; }
+.citymap .pin.ok .pdot { fill:var(--ok); } .citymap .pin.warn .pdot { fill:var(--warn); } .citymap .pin.crit .pdot { fill:var(--crit); } .citymap .pin.off .pdot { fill:var(--ink-3); }
+.citymap .pin.on .pdot, .citymap .pin:focus-visible .pdot { stroke:var(--ink); }
 .citymap .pin .pico { fill:#fff; font:700 13px var(--f-body); pointer-events:none; }
 .citymap .pin .plab { fill:var(--ink-2); font:500 14px var(--f-mono); }
 .citymap .pulse { pointer-events:none; fill:var(--crit); opacity:.35; transform-box:fill-box; transform-origin:center; animation:pulse 1.6s ease-out infinite; }
 @keyframes pulse { from { transform:scale(1); opacity:.45; } to { transform:scale(2.4); opacity:0; } }
 @media (prefers-reduced-motion:reduce){ .citymap .pulse { animation:none; } }
-.lg { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; vertical-align:middle; } .lg.ok { background:var(--ok); } .lg.warn { background:var(--warn); } .lg.crit { background:var(--crit); }
+.lgd { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; vertical-align:middle; } .lgd.ok { background:var(--ok); } .lgd.warn { background:var(--warn); } .lgd.crit { background:var(--crit); }
 /* analytics */
 .gbars { display:flex; align-items:flex-end; gap:18px; height:200px; padding:18px 4px 0; border-bottom:1px solid var(--line); }
 .gb { flex:1; height:100%; display:flex; flex-direction:column; min-width:0; }
