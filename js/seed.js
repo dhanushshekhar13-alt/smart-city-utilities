@@ -53,6 +53,9 @@ for(const cyc of [1,2,3]) for(const p of PG.property){
   else if(cyc<3) inv.payment_status="OVERDUE";
 }
 
+// bills already past their due date carry the late fee from the nightly job
+fnMarkOverdue();
+
 // users (passwords are Argon2id hashes in the real build; here everyone uses "demo123")
 const U=(email,role,resident,zone,name)=>insert("app_user",{user_id:uid(),email,password_hash:"$argon2id$v=19$m=19456,t=2,p=1$…",role,resident_id:resident?resBy(resident).resident_id:null,staff_zone_id:zone,failed_logins:0,locked_until:null,display:name});
 U("asha@example.test","RESIDENT","asha",null,"Asha Rao"); U("vikram@example.test","RESIDENT","vikram",null,"Vikram Iyer");

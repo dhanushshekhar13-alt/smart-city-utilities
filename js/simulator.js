@@ -107,12 +107,15 @@ function raise(m,type,severity,reason,data,keyOverride){
 }
 
 // ---------- simulator tick ----------
+// jobs that run after every batch of readings (live clock, +1 hour and Jump to month end alike)
+const AFTER_BATCH=[];
+function afterBatch(){ detect(); for(const f of AFTER_BATCH) f(); }
 function tick(){
   now+=TICK;
   const docs=PG.utility_meter.filter(m=>!SIM.offline.has(m.meter_code)).map(m=>makeReading(m,now));
   mongoInsert(docs); retention();
   log("mg",`Smart meters reported ${docs.length} readings`,`db.meter_readings.insertMany([ …${docs.length} docs… ], { ordered: false })\n// e.g. ${JSON.stringify(stripDoc(docs.find(d=>d.meta.utility==="WATER")||docs[0]))}`,{collapse:"ingest"});
-  detect();
+  afterBatch();
   if(now>=NOV1&&octoberOpen()) return closeOctober(); // the clock just crossed month end
   render(true);
 }
@@ -122,7 +125,7 @@ function fastForwardTo(t){
   while(now<t){
     now+=TICK;
     const docs=PG.utility_meter.filter(m=>!SIM.offline.has(m.meter_code)).map(m=>makeReading(m,now));
-    mongoInsert(docs); detect(); n+=docs.length;
+    mongoInsert(docs); afterBatch(); n+=docs.length;
   }
   retention();
   log("mg",`Smart meters reported ${n.toLocaleString("en-IN")} readings (${fmtDT(from)} → ${fmtDT(now)})`,`db.meter_readings.insertMany([ …${n} docs, one per meter every 15 min… ], { ordered: false })`);

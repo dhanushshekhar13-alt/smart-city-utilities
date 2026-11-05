@@ -26,6 +26,10 @@ const sevCls=s=>({CRITICAL:"s-crit",HIGH:"s-crit",MEDIUM:"s-warn",LOW:"s-mute"})
 const stCls=s=>({PAID:"s-ok",PENDING:"s-info",OVERDUE:"s-crit",OPEN:"s-crit",ASSIGNED:"s-warn",IN_PROGRESS:"s-warn",RESOLVED:"s-ok",CLOSED:"s-mute",SUCCEEDED:"s-ok",FAILED:"s-crit",NORMAL:"s-ok",UNDER_INVESTIGATION:"s-warn",ACK:"s-warn"})[s]||"s-mute";
 const badge=(s,label)=>`<span class="status ${stCls(s)}">${esc(label||s.replace("_"," "))}</span>`;
 const sev=s=>`<span class="status ${sevCls(s)}">${esc(s)}</span>`;
+const ownerOf=p=>PG.app_user.find(u=>u.resident_id===p.resident_id);
+function notify(userId,kind,title,body){ // MongoDB notifications collection
+  MG.notifications.push({_id:"n"+(MG.notifications.length+1),user_id:userId,kind,title,body,created_at:now,read_at:null});
+}
 
 const CHARTS={};
 function niceMax(v){ if(v<=0) return 1; const p=Math.pow(10,Math.floor(Math.log10(v))); const n=v/p; return (n<=1?1:n<=2?2:n<=2.5?2.5:n<=5?5:10)*p; }
@@ -145,7 +149,7 @@ V.bills=()=>{
   const u=SESSION.user; const invs=rlsInvoices(u).slice().sort((a,b)=>b.cycle_id-a.cycle_id||a.invoice_no.localeCompare(b.invoice_no));
   const sel=SESSION.sel.inv&&invs.find(i=>i.invoice_id===SESSION.sel.inv)||invs.find(i=>i.payment_status!=="PAID")||invs[0];
   SESSION.sel.inv=sel.invoice_id;
-  const lines=PG.invoice_line_item.filter(l=>l.invoice_id===sel.invoice_id).sort((a,b)=>a.utility_type.localeCompare(b.utility_type)||a.tier_level-b.tier_level);
+  const lines=billLines(sel);
   const pays=PG.payment.filter(x=>x.invoice_id===sel.invoice_id);
   const c=PG.billing_cycle.find(x=>x.cycle_id===sel.cycle_id); const p=propById(sel.property_id);
   const vik=resBy("vikram"); const other=u.resident_id===vik.resident_id?PG.invoice.find(i=>propById(i.property_id).resident_id===resBy("asha").resident_id&&i.cycle_id===3):PG.invoice.find(i=>propById(i.property_id).resident_id===vik.resident_id&&i.cycle_id===3); const otherName=u.resident_id===vik.resident_id?"Asha":"Vikram";
@@ -159,9 +163,10 @@ V.bills=()=>{
      <div class="row"><button class="btn" data-act="rls-try" data-id="${other?other.invoice_id:""}">Try to open ${otherName}'s invoice</button></div><div id="rls-out"></div></div></div>
    <div class="panel"><div class="panel-head"><div><span class="eyebrow">${esc(cycleName(sel.cycle_id))} · ${esc(p.property_code)}</span><h2 class="mono">${sel.invoice_no}</h2></div>${badge(sel.payment_status)}</div>
      <div class="tablewrap"><table><thead><tr><th>Utility</th><th>Slab</th><th class="r">Units</th><th class="r">Rate</th><th class="r">Amount</th></tr></thead><tbody>
-     ${lines.map(l=>{const r=PG.utility_rate.find(x=>x.rate_id===l.rate_id);return `<tr><td><span class="dot" style="background:${UT[l.utility_type].color}"></span>${UT[l.utility_type].label}</td><td>Tier ${l.tier_level}: ${n1(r.min_units)}–${r.max_units==null?"∞":n1(r.max_units)} ${UT[l.utility_type].unit}</td><td class="r">${n2(l.units_consumed)}</td><td class="r">₹${n2(l.rate_applied)}</td><td class="r">${inr(l.line_total)}</td></tr>`;}).join("")}
+     ${lines.map(billLine).join("")}
      <tr><td colspan="4"><b>Total</b> <span class="muted">(kept equal to the lines by trigger trg_invoice_total)</span></td><td class="r"><b>${inr(sel.total_amount)}</b></td></tr></tbody></table></div>
-     <p class="ink2" style="margin:8px 0">Due ${fmtD(c.due_date)}. Rates are copied onto each line so the bill never changes if the tariff does.</p>
+     <p class="ink2" style="margin:8px 0">Due ${fmtD(c.due_date)}. Rates are copied onto each line so the bill never changes if the tariff does.${sel.payment_status==="OVERDUE"?` <b>Paid late:</b> the nightly job added a ${c.late_penalty_percent}% late fee.`:""}</p>
+     <div class="row" style="margin-bottom:8px"><button class="btn small" data-act="print-bill" data-id="${sel.invoice_id}">Print or save as PDF</button></div>
      ${sel.payment_status!=="PAID"?`<div class="stack" style="border-top:1px solid var(--line);padding-top:12px"><h3>Pay this bill <span class="pill">Simulated gateway, no real money</span></h3>
        <div class="row"><label class="f">Method<select class="in" id="pay-method"><option value="UPI_SIM">UPI (simulated)</option><option value="CARD_SIM">Card (simulated)</option><option value="NETBANK_SIM">Net banking (simulated)</option></select></label>
        <label class="f">Gateway outcome<select class="in" id="pay-outcome"><option value="OK">Approve</option><option value="FAIL">Decline</option></select></label></div>
@@ -169,6 +174,45 @@ V.bills=()=>{
      ${pays.length?`<h3 style="margin-top:12px">Payment attempts</h3><div class="tablewrap"><table><thead><tr><th>When</th><th>Method</th><th>Status</th><th>Reference</th></tr></thead><tbody>${pays.map(x=>`<tr><td>${fmtDT(x.payment_date)}</td><td>${x.payment_method}</td><td>${badge(x.status)}</td><td class="mono">${esc(x.transaction_id||x.failure_reason)}</td></tr>`).join("")}</tbody></table></div>`:""}
    </div></div>`;
 };
+const billLines=inv=>PG.invoice_line_item.filter(l=>l.invoice_id===inv.invoice_id).sort((a,b)=>(a.line_kind==="LATE_FEE")-(b.line_kind==="LATE_FEE")||a.utility_type.localeCompare(b.utility_type)||(a.tier_level||0)-(b.tier_level||0));
+function billLine(l){
+  const u=UT[l.utility_type], dot=`<span class="dot" style="background:${u.color}"></span>`;
+  if(l.line_kind==="LATE_FEE") return `<tr><td>${dot}${u.label}</td><td><span class="status s-crit">Late fee</span> ${n1(l.rate_applied)}% of usage</td><td class="r">–</td><td class="r">${n1(l.rate_applied)}%</td><td class="r">${inr(l.line_total)}</td></tr>`;
+  const r=PG.utility_rate.find(x=>x.rate_id===l.rate_id);
+  return `<tr><td>${dot}${u.label}</td><td>Tier ${l.tier_level}: ${n1(r.min_units)}–${r.max_units==null?"∞":n1(r.max_units)} ${u.unit}</td><td class="r">${n2(l.units_consumed)}</td><td class="r">₹${n2(l.rate_applied)}</td><td class="r">${inr(l.line_total)}</td></tr>`;
+}
+// printable bill: rendered into a hidden frame and sent to the browser's print dialog (Save as PDF works too)
+function printBill(inv){
+  const p=propById(inv.property_id), r=PG.resident.find(x=>x.resident_id===p.resident_id), c=PG.billing_cycle.find(x=>x.cycle_id===inv.cycle_id);
+  const lines=billLines(inv).map(l=>{ const u=UT[l.utility_type];
+    if(l.line_kind==="LATE_FEE") return `<tr><td>${u.label}</td><td>Late fee, ${n1(l.rate_applied)}% of usage</td><td></td><td></td><td class="r">${inr(l.line_total)}</td></tr>`;
+    const t=PG.utility_rate.find(x=>x.rate_id===l.rate_id);
+    return `<tr><td>${u.label}</td><td>Tier ${l.tier_level}: ${n1(t.min_units)}–${t.max_units==null?"∞":n1(t.max_units)} ${u.unit}</td><td class="r">${n2(l.units_consumed)}</td><td class="r">₹${n2(l.rate_applied)}</td><td class="r">${inr(l.line_total)}</td></tr>`; }).join("");
+  const pay=PG.payment.find(x=>x.invoice_id===inv.invoice_id&&x.status==="SUCCEEDED");
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>${inv.invoice_no}</title><style>
+    body{font-family:Helvetica,Arial,sans-serif;color:#13212c;margin:36px;font-size:13px}h1{font-size:22px;margin:0}
+    .top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0b5d7a;padding-bottom:14px;margin-bottom:18px}
+    .brand{color:#0b5d7a;font-weight:700;font-size:15px}.muted{color:#6f8190}.grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 30px;margin-bottom:18px}
+    table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:7px 6px;border-bottom:1px solid #d5dee5}th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#465867}
+    .r{text-align:right}.total td{font-weight:700;font-size:15px;border-bottom:none}.st{display:inline-block;padding:3px 10px;border-radius:99px;font-weight:700;font-size:12px;background:${inv.payment_status==="PAID"?"#e1f3e8;color:#1d7f46":inv.payment_status==="OVERDUE"?"#fbe4e4;color:#c22f2f":"#e1eaf4;color:#2f5f8f"}}
+    .foot{margin-top:26px;font-size:11px;color:#6f8190}</style></head><body>
+    <div class="top"><div><div class="brand">Smart City Utilities</div><div class="muted">Synthetic City Municipal Corporation · demo data only</div></div>
+    <div style="text-align:right"><h1>${inv.invoice_no}</h1><div class="muted">${esc(cycleName(inv.cycle_id))}</div><div style="margin-top:6px"><span class="st">${inv.payment_status}</span></div></div></div>
+    <div class="grid"><div><b>Billed to</b><br>${esc(r.full_name)}<br>${esc(p.address_line)}<br>${esc(p.city)} ${esc(p.pincode)}</div>
+    <div><b>Property</b> ${esc(p.property_code)} · ${esc(p.property_type.toLowerCase())}<br><b>Zone</b> ${esc(zname(p.zone_id))}, ${esc(zname(districtOf(p.zone_id)))}<br><b>Period</b> ${fmtD(c.cycle_start_date)} – ${fmtD(c.cycle_end_date)}<br><b>Due</b> ${fmtD(c.due_date)}</div></div>
+    <table><thead><tr><th>Utility</th><th>Slab</th><th class="r">Units</th><th class="r">Rate</th><th class="r">Amount</th></tr></thead><tbody>${lines}
+    <tr class="total"><td colspan="4">Total</td><td class="r">${inr(inv.total_amount)}</td></tr></tbody></table>
+    ${pay?`<p><b>Paid</b> ${fmtDT(pay.payment_date)} by ${pay.payment_method.replace("_SIM","").toLowerCase()} · ref ${esc(pay.transaction_id)}</p>`:inv.payment_status==="OVERDUE"?`<p><b>Overdue since ${fmtD(c.due_date)}.</b> Please pay now in the resident portal.</p>`:`<p>Pay online in the resident portal before ${fmtD(c.due_date)} to avoid a ${c.late_penalty_percent}% late fee.</p>`}
+    <div class="foot">Units are the closing minus the opening reading of each smart meter for the period. Rates are fixed on the bill when it is issued. Generated ${fmtDT(now)}.</div></body></html>`;
+  const f=document.createElement("iframe"); f.style.cssText="position:fixed;width:0;height:0;border:0;right:0;bottom:0"; document.body.appendChild(f);
+  f.contentDocument.open(); f.contentDocument.write(html); f.contentDocument.close();
+  setTimeout(()=>{ f.contentWindow.focus(); f.contentWindow.print(); setTimeout(()=>f.remove(),1000); },100);
+  log("pg",`Bill ${inv.invoice_no} rendered for printing`,`${sqlCtx(SESSION.user)}SELECT i.*, li.*, p.address_line, r.full_name
+FROM invoice i JOIN invoice_line_item li USING (invoice_id)
+JOIN property p USING (property_id) JOIN resident r USING (resident_id)
+WHERE i.invoice_id = $1;   -- RLS still applies
+COMMIT;`);
+}
 function spRecordPayment(invoiceId,method,key,outcome){
   const u=SESSION.user; const inv=rlsInvoices(u).find(i=>i.invoice_id===invoiceId);
   const stmt=`${sqlCtx(u)}CALL sp_record_payment('${inv.invoice_no}', ${n2(inv.total_amount/100)}, '${method}', '${key}', '${outcome}');\nCOMMIT;`;
@@ -407,6 +451,17 @@ function closeOctober(){
   toast(inv.created.length?`October closed: ${inv.created.length} new bills issued`:"October was already billed; nothing new");
   render();
 }
+// nightly jobs at 00:00 city time
+AFTER_BATCH.push(()=>{ if(cityDate(now)!==cityDate(now-TICK)) nightly(); });
+function nightly(){
+  const res=fnMarkOverdue();
+  if(!res.length) return;
+  const fees=res.reduce((s,r)=>s+r.fee,0);
+  log("pg",`Nightly job: ${res.filter(r=>r.wasPending).length} bills now OVERDUE, late fees ${inr(fees)} added`,SQL_OVERDUE.replace("$today",`DATE '${cityDate()}'`));
+  for(const {inv,fee} of res){ const p=propById(inv.property_id), o=ownerOf(p); if(!o||!fee) continue;
+    notify(o.user_id,"OVERDUE",`Bill overdue: ${inv.invoice_no}`,`Your ${cycleName(inv.cycle_id)} bill for ${p.property_code} was not paid by its due date. A late fee of ${inr(fee)} was added; the amount due is now ${inr(inv.total_amount)}.`); }
+  log("mg","Overdue alerts sent to residents","db.notifications.insertMany([ { kind: \"OVERDUE\", title: \"Bill overdue: INV-…\" }, … ])");
+}
 V.tix=()=>{
   const ts=PG.maintenance_ticket.slice().sort((a,b)=>b.reported_timestamp-a.reported_timestamp);
   const sel=ts.find(t=>t.ticket_id===SESSION.sel.tk)||ts[0];
@@ -637,6 +692,7 @@ document.addEventListener("click",e=>{
   if(a==="supply"){ setSupply(b.dataset.code,b.dataset.on==="true"); toast(b.dataset.on==="true"?"Supply back on. Usage returns on the next reading.":"Supply off. Usage reads 0 from the next reading; the city clock keeps running."); return; }
   if(a==="scen-start"||a==="scen-stop"){ scenario(b.dataset.id,a==="scen-start"); toast(a==="scen-start"?"Scenario running. Press +1 hour to let the detector see it.":"Back to normal readings."); return; }
   if(a==="agg"){ runAggregation(); return; }
+  if(a==="print-bill"){ const inv=rlsInvoices(u).find(i=>i.invoice_id===b.dataset.id); if(inv) printBill(inv); return; }
   if(a==="gen"){ generateInvoices(); return; }
   if(a==="rule"){ const i=+b.dataset.i; const t=V.rules.tries[i]; const box=$("#rule-"+i);
     try{ t[2](); log(t[3]||"pg",`Accepted: ${t[0]}`,t[1]); box.innerHTML=`<div class="okbox">Accepted (unexpected).</div>`; }

@@ -34,3 +34,44 @@ function spGenerateInvoice(propertyId,cycleId,quiet){
   for(const {m,t} of staged) insert("invoice_line_item",{line_item_id:uid(),invoice_id:inv.invoice_id,utility_type:m.utility_type,line_kind:"USAGE",rate_id:t.rate_id,tier_level:t.tier_level,units_consumed:t.units,rate_applied:t.price,line_total:t.amount});
   return {created:inv};
 }
+
+// fn_mark_overdue(): nightly job (pg_cron, 00:00). Unpaid bills past their due date become OVERDUE and get a
+// one-off late fee: one LATE_FEE line per utility, late_penalty_percent of that utility's usage lines.
+const cityDate=(t=now)=>new Date(t).toLocaleDateString("en-CA",IST);
+function fnMarkOverdue(){
+  const today=cityDate(), out=[];
+  for(const inv of PG.invoice){
+    if(inv.payment_status==="PAID"||inv.payment_status==="DISPUTED") continue;
+    const c=PG.billing_cycle.find(x=>x.cycle_id===inv.cycle_id);
+    if(!(c.due_date<today)) continue;
+    const wasPending=inv.payment_status==="PENDING";
+    if(wasPending) update("invoice",inv,{payment_status:"OVERDUE"});
+    let fee=0;
+    if(!PG.invoice_line_item.some(l=>l.invoice_id===inv.invoice_id&&l.line_kind==="LATE_FEE")){
+      for(const u of Object.keys(UT)){
+        const usage=PG.invoice_line_item.filter(l=>l.invoice_id===inv.invoice_id&&l.line_kind==="USAGE"&&l.utility_type===u).reduce((s,l)=>s+l.line_total,0);
+        if(!usage) continue;
+        const amt=Math.round(usage*c.late_penalty_percent/100);
+        insert("invoice_line_item",{line_item_id:uid(),invoice_id:inv.invoice_id,utility_type:u,line_kind:"LATE_FEE",rate_id:null,tier_level:null,units_consumed:0,rate_applied:c.late_penalty_percent,line_total:amt});
+        fee+=amt;
+      }
+    }
+    if(wasPending||fee) out.push({inv,fee,wasPending});
+  }
+  return out;
+}
+const SQL_OVERDUE=`-- scheduled with pg_cron: SELECT cron.schedule('0 0 * * *', 'SELECT fn_mark_overdue(current_date)');
+UPDATE invoice i SET payment_status = 'OVERDUE'
+FROM billing_cycle bc
+WHERE bc.cycle_id = i.cycle_id AND i.payment_status = 'PENDING' AND bc.due_date < $today;
+
+INSERT INTO invoice_line_item (invoice_id, utility_type, line_kind, rate_applied, units_consumed, line_total)
+SELECT i.invoice_id, li.utility_type, 'LATE_FEE', bc.late_penalty_percent, 0,
+       ROUND(SUM(li.line_total) * bc.late_penalty_percent / 100)
+FROM invoice i
+JOIN billing_cycle bc USING (cycle_id)
+JOIN invoice_line_item li ON li.invoice_id = i.invoice_id AND li.line_kind = 'USAGE'
+WHERE i.payment_status = 'OVERDUE'
+  AND NOT EXISTS (SELECT 1 FROM invoice_line_item f WHERE f.invoice_id = i.invoice_id AND f.line_kind = 'LATE_FEE')
+GROUP BY i.invoice_id, li.utility_type, bc.late_penalty_percent;
+-- trg_invoice_total then adds the fee to invoice.total_amount`;
