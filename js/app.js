@@ -113,14 +113,65 @@ V.how=()=>`<div class="page-head"><span class="eyebrow">How it works</span><h1>O
 
 // ----- resident -----
 function resProps(){ return visibleProperties(SESSION.user); }
+
+// ---------- bill forecast ----------
+// projected bill = units used so far this cycle + (last 24 h of usage) × days left, priced with the tariff slabs
+const DEC1=Date.parse("2026-12-01T00:00:00+05:30");
+const openCycle=()=>now>=NOV1?{id:5,from:NOV1,to:DEC1,end:"2026-11-30",name:"November"}:{id:4,from:OCT1,to:NOV1,end:"2026-10-31",name:"October"};
+const usageAmt=i=>PG.invoice_line_item.filter(l=>l.invoice_id===i.invoice_id&&l.line_kind==="USAGE").reduce((s,l)=>s+l.line_total,0);
+const MON=["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function forecast(pid){
+  const c=openCycle(), left=Math.max(0,(c.to-now)/HOUR);
+  const prev=PG.invoice.filter(i=>i.property_id===pid&&i.cycle_id<c.id).sort((a,b)=>a.cycle_id-b.cycle_id).slice(-3);
+  const rows=metersOf(pid).map(m=>{
+    const tot=cycleTotals(m.meter_code,c.from,now), used=tot?tot.closing-tot.opening:0;
+    const a=(byMeter.get(m.meter_code)||[]).filter(d=>!d._opening&&d.ts>=now-24*HOUR);
+    const perH=a.length>1?(regOf(a[a.length-1])-regOf(a[0]))/((a[a.length-1].ts-a[0].ts)/HOUR):0;
+    const proj=used+perH*left;
+    const cost=x=>tieredCharge(m.utility_type,x,c.end).reduce((s,t)=>s+t.amount,0);
+    const hist=prev.map(i=>{const r=PG.meter_reading.find(x=>x.meter_id===m.meter_id&&x.cycle_id===i.cycle_id);return r?r.total_units_consumed:0;});
+    const avgUnits=hist.length?hist.reduce((s,v)=>s+v,0)/hist.length:0;
+    return {m,used,proj,perH,costNow:cost(used),costProj:cost(proj),avgUnits,ratio:avgUnits?proj/avgUnits:1};
+  });
+  const total=rows.reduce((s,r)=>s+r.costProj,0), soFar=rows.reduce((s,r)=>s+r.costNow,0);
+  const hist=prev.map(i=>({label:MON[PG.billing_cycle.find(x=>x.cycle_id===i.cycle_id).month],amt:usageAmt(i)}));
+  const avg=hist.length?hist.reduce((s,h)=>s+h.amt,0)/hist.length:0;
+  const worst=rows.slice().sort((a,b)=>b.ratio-a.ratio)[0];
+  const high=(avg&&total>=1.2*avg)||worst.ratio>=1.5;
+  return {c,rows,total,soFar,hist,avg,ratio:avg?total/avg:1,worst,high};
+}
+function forecastPanel(f){
+  const bars=[...f.hist.map(h=>({...h,kind:"past"})),{label:MON[f.c.id+6]+" (forecast)",amt:f.total,kind:"proj"}];
+  const max=Math.max(...bars.map(b=>b.amt),f.avg)*1.1||1;
+  const pct=Math.round((f.ratio-1)*100);
+  return `<div class="panel"><div class="panel-head"><div class="row"><h2>${f.c.name} bill forecast</h2>${src("mg")}${src("pg")}</div><span class="muted">Updated every reading</span></div>
+   ${f.high?`<div class="banner warn" style="margin-bottom:12px"><b>Heading for a high bill.</b> ${f.worst.ratio>=1.5?`${UT[f.worst.m.utility_type].label} is on course for ${n1(f.worst.proj)} ${UT[f.worst.m.utility_type].unit}, ${n1(f.worst.ratio)}× your usual ${n1(f.worst.avgUnits)}. `:""}Forecast ${inr(f.total)} against your usual ${inr(f.avg)}.</div>`
+     :`<div class="banner ok" style="margin-bottom:12px"><b>On track.</b> Forecast ${inr(f.total)}, ${pct>=0?`${pct}% above`:`${-pct}% below`} your 3-month average of ${inr(f.avg)}.</div>`}
+   <div class="fcgrid"><div class="tablewrap"><table class="fc"><thead><tr><th>Utility</th><th class="r">Used so far</th><th class="r">By ${fmtD(f.c.end)}</th><th class="r">Usual</th><th class="r">Forecast</th></tr></thead><tbody>
+    ${f.rows.map(r=>`<tr><td><span class="dot" style="background:${UT[r.m.utility_type].color}"></span>${UT[r.m.utility_type].label}</td><td class="r">${n1(r.used)} ${UT[r.m.utility_type].unit}</td><td class="r"><b>${n1(r.proj)}</b></td><td class="r">${n1(r.avgUnits)}</td><td class="r">${inr(r.costProj)}</td></tr>`).join("")}
+    <tr><td colspan="4"><b>Total</b> <span class="muted">so far ${inr(f.soFar)}</span></td><td class="r"><b>${inr(f.total)}</b></td></tr></tbody></table></div>
+   <div class="bars" role="img" aria-label="Bills for the last three months and the forecast">${bars.map(b=>`<div class="bar ${b.kind}"><span class="amt">${inr(b.amt).replace(/\.\d\d$/,"")}</span><span class="col" style="height:${Math.round(b.amt/max*100)}%"></span><span class="lab">${b.label}</span></div>`).join("")}</div></div>
+   <p class="muted" style="font-size:12px;margin-top:6px">Forecast = units used since ${fmtD(f.c.id===4?"2026-10-01":"2026-11-01")} (MongoDB first/last register) + the last 24 hours' rate × ${n1((f.c.to-now)/HOUR/24)} days left, priced with the same <code>fn_tiered_charge</code> slabs. Past months are the usage lines of your PostgreSQL invoices.</p></div>`;
+}
+// high-bill warning: checked every city hour, at most one alert per property per cycle
+AFTER_BATCH.push(()=>{
+  if((now+19800000)%HOUR!==0) return;   // once per IST hour (IST = UTC+5:30)
+  if(now-openCycle().from<3*24*HOUR) return;   // too early in the month for a fair forecast
+  for(const p of PG.property){
+    const o=ownerOf(p); if(!o) continue;
+    const f=forecast(p.property_id), ref=`FORECAST:${p.property_code}:${f.c.id}`;
+    if(!f.high||MG.notifications.some(n=>n.ref===ref)) continue;
+    notify(o.user_id,"FORECAST",`${f.c.name} bill for ${p.property_code} is heading higher than usual`,`At the current rate it will be about ${inr(f.total)} (usual ${inr(f.avg)}). ${UT[f.worst.m.utility_type].label} is the biggest change: ${n1(f.worst.proj)} ${UT[f.worst.m.utility_type].unit} forecast against ${n1(f.worst.avgUnits)} usually.`);
+    MG.notifications[MG.notifications.length-1].ref=ref;
+    log("mg",`High-bill warning sent for ${p.property_code}`,`db.notifications.updateOne({ ref: "${ref}" },\n  { $setOnInsert: { kind: "FORECAST", user_id: …, title: "… heading higher than usual" } }, { upsert: true })`);
+  }
+});
 V.home=()=>{
   const u=SESSION.user, props=resProps(); const pid=SESSION.sel.prop||props[0].property_id; SESSION.sel.prop=pid; const p=propById(pid);
   const ut=SESSION.sel.ut||"ELECTRICITY"; const m=metersOf(pid).find(x=>x.utility_type===ut);
   const pts=seriesFor(m.meter_code); const last=pts[pts.length-1];
   const due=rlsInvoices(u).filter(i=>i.property_id===pid&&i.payment_status!=="PAID");
-  const nov=now>=NOV1, from=nov?NOV1:OCT1;
-  const oct=metersOf(pid).map(mm=>{const c=cycleTotals(mm.meter_code,from,now);return {mm,units:c?c.closing-c.opening:0};});
-  const est=oct.reduce((s,o)=>s+tieredCharge(o.mm.utility_type,o.units,nov?"2026-11-30":"2026-10-31").reduce((a,t)=>a+t.amount,0),0);
+  const f=forecast(pid), fp=Math.round((f.ratio-1)*100);
   const notif=MG.notifications.filter(n=>n.user_id===u.user_id&&!n.read_at).length;
   return `<div class="page-head"><span class="eyebrow">Resident portal</span><h1>Welcome back, ${esc(u.display.split(" ")[0])}</h1></div>
   ${props.length>1?`<div class="tabs" role="group" aria-label="Property">${props.map(x=>`<button aria-pressed="${x.property_id===pid}" data-act="sel-prop" data-id="${x.property_id}">${esc(x.property_code)} · ${esc(x.address_line.split(",")[0])}</button>`).join("")}</div>`:""}
@@ -134,9 +185,10 @@ V.home=()=>{
      </tbody></table></div></div>
    <div class="kpis" style="align-content:start">
      <div class="kpi"><span class="l">Unpaid bills ${src("pg")}</span><span class="v">${due.length?inr(due.reduce((s,i)=>s+i.total_amount,0)):"₹0.00"}</span><span class="l">${due.length?`${due.length} bill${due.length>1?"s":""}, next due ${fmtD(PG.billing_cycle.find(c=>c.cycle_id===due[0].cycle_id).due_date)}`:"All paid"}</span></div>
-     <div class="kpi"><span class="l">${nov?"November":"October"} so far ${src("mg")}</span><span class="v">${inr(est)}</span><span class="l">Estimated from live readings with current slabs</span></div>
+     <div class="kpi"><span class="l">${f.c.name} forecast ${src("mg")}</span><span class="v">${inr(f.total)}</span><span class="l">${inr(f.soFar)} so far · <span class="status ${f.high?"s-crit":fp>0?"s-warn":"s-ok"}">${fp>=0?"+":""}${fp}% vs usual</span></span></div>
      <div class="kpi"><span class="l">Unread alerts ${src("mg")}</span><span class="v">${notif}</span><span class="l">${notif?`<button class="btn small" data-act="go" data-view="alerts">Open alerts</button>`:"Nothing unusual"}</span></div>
    </div></div>
+  ${forecastPanel(f)}
   <div class="panel"><div class="panel-head"><div class="row"><h2>Live usage, last 24 hours</h2>${src("mg")}</div>
      <div class="tabs" role="group" aria-label="Utility">${Object.keys(UT).map(k=>`<button aria-pressed="${k===ut}" data-act="sel-ut" data-ut="${k}"><span class="dot" style="background:${UT[k].color}"></span>${UT[k].label}</button>`).join("")}</div></div>
    <p class="ink2" style="margin-bottom:8px">Right now: <b class="num">${last?n2(last.v):"–"} ${UT[ut].rate}</b> · meter <span class="mono">${m.meter_code}</span> · last reading ${last?fmtT(last.t):"–"}${SIM.offline.has(m.meter_code)?` · ${badge("OVERDUE","offline")}`:""}${isOff(m.meter_code)?` · ${badge("CLOSED","switched off")}`:""}${SIM.mode[m.meter_code]==="SHUTOFF"?` · <span class="status s-warn">valve closed automatically</span>`:""} · ${supplyBtn(m.meter_code,true)}</p>
