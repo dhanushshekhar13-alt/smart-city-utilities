@@ -6,7 +6,7 @@ const SESSION={user:null,view:null,sel:{}};
 const NAV={
   RESIDENT:[["home","My dashboard"],["bills","Bills & payments"],["eco","Footprint & savings"],["tickets","Complaints"],["alerts","Alerts"],["db","Inside the databases"],["how","How it works"]],
   STAFF:[["queue","Ticket queue"],["db","Inside the databases"],["how","How it works"]],
-  ADMIN:[["ops","City operations"],["scen","Disaster simulator"],["billing","Billing run"],["tix","All tickets"],["rules","Database rules"],["sql","SQL lab"],["db","Inside the databases"],["how","How it works"]],
+  ADMIN:[["ops","City operations"],["map","City map"],["analytics","Analytics"],["scen","Disaster simulator"],["billing","Billing run"],["tix","All tickets"],["rules","Database rules"],["sql","SQL lab"],["db","Inside the databases"],["how","How it works"]],
 };
 function login(user){
   const raw=Array.from({length:4},()=>Math.floor(rnd()*2**32).toString(16).padStart(8,"0")).join("");
