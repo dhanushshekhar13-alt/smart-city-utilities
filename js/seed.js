@@ -59,7 +59,7 @@ fnMarkOverdue();
 // users (passwords are Argon2id hashes in the real build; here everyone uses "demo123")
 const U=(email,role,resident,zone,name)=>insert("app_user",{user_id:uid(),email,password_hash:"$argon2id$v=19$m=19456,t=2,p=1$…",role,resident_id:resident?resBy(resident).resident_id:null,staff_zone_id:zone,failed_logins:0,locked_until:null,display:name});
 U("asha@example.test","RESIDENT","asha",null,"Asha Rao"); U("vikram@example.test","RESIDENT","vikram",null,"Vikram Iyer");
-U("ravi.staff@city.example.test","STAFF",null,2,"Ravi Kumar"); U("kavya.staff@city.example.test","STAFF",null,3,"Kavya Shetty");
+U("ravi.staff@city.example.test","STAFF",null,2,"Ravi Kumar"); U("neha.staff@city.example.test","STAFF",null,2,"Neha Joshi"); U("kavya.staff@city.example.test","STAFF",null,3,"Kavya Shetty");
 U("admin@city.example.test","ADMIN",null,null,"City Admin");
 const userById=id=>PG.app_user.find(u=>u.user_id===id);
 

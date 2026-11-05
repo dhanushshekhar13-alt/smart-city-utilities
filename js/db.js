@@ -90,7 +90,8 @@ function checkRow(table,row,selfRef){
 }
 const o2s=c=>`${c.utility_type}, ${c.tier_level}, [${c.effective_start_date},${c.effective_end_date??""})`;
 const short=v=>typeof v==="string"&&v.length>20?v.slice(0,8)+"…":v;
-const computed=(t,r)=>{ if(t==="meter_reading") r.total_units_consumed=Math.round((r.closing_register-r.opening_register)*1000)/1000; };
+const computed=(t,r)=>{ if(t==="meter_reading") r.total_units_consumed=Math.round((r.closing_register-r.opening_register)*1000)/1000;
+  if(t==="maintenance_ticket"){ if(r.sla_due_at==null) r.sla_due_at=r.reported_timestamp+SLA_H[r.severity]*HOUR; if(r.escalated_at===undefined) r.escalated_at=null; } };
 function insert(table,row){ computed(table,row); checkRow(table,row,null); PG[table].push(row); trgAfter(table,null,row); return row; }
 function update(table,row,patch){
   const next={...row,...patch}; computed(table,next);
@@ -98,6 +99,11 @@ function update(table,row,patch){
   checkRow(table,next,row);
   const old={...row}; Object.assign(row,next); trgAfter(table,old,row); return row;
 }
+// automatic jobs write as the system, so history shows "system" rather than whoever is signed in
+let SYSTEM=false;
+const asSystem=f=>{ SYSTEM=true; try{ return f(); } finally{ SYSTEM=false; } };
+// SLA: hours to resolve by severity (trg_ticket_sla sets sla_due_at on insert)
+const SLA_H={CRITICAL:4,HIGH:8,MEDIUM:24,LOW:72};
 // triggers
 function trgBefore(table,old,next){
   if(table==="maintenance_ticket"&&old.status!==next.status){
@@ -116,7 +122,7 @@ function trgBefore(table,old,next){
 }
 function trgAfter(table,old,row){
   if(table==="maintenance_ticket"&&(!old||old.status!==row.status)){
-    PG.ticket_status_history.push({history_id:PG.ticket_status_history.length+1,ticket_id:row.ticket_id,from_status:old?old.status:null,to_status:row.status,changed_by:(!old&&row.source==="ANOMALY")||!SESSION.user?null:SESSION.user.user_id,changed_at:now});
+    PG.ticket_status_history.push({history_id:PG.ticket_status_history.length+1,ticket_id:row.ticket_id,from_status:old?old.status:null,to_status:row.status,changed_by:SYSTEM||(!old&&row.source==="ANOMALY")||!SESSION.user?null:SESSION.user.user_id,changed_at:now});
   }
   if(table==="invoice_line_item"){
     const inv=PG.invoice.find(i=>i.invoice_id===row.invoice_id);

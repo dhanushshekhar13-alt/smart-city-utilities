@@ -2,7 +2,9 @@
 /* IoT simulator (MongoDB time-series readings), anomaly detection and the aggregations the screens use. */
 
 // ---------- IoT simulator: MongoDB time-series readings ----------
-const SIM={running:true,mode:{},offline:new Set(),timer:null};
+const SIM={running:true,mode:{},offline:new Set(),timer:null,
+  policy:{autoDispatch:true}}; // smart automation switches (admin → Disaster simulator)
+const ON_NEW_TICKET=[]; // jobs that run when the detector opens a ticket
 const profile=(m,t)=>{ // hourly-shaped demand, in kW / L/min / m³/h
   const h=Number(new Date(t).toLocaleString("en-GB",{...IST,hour:"2-digit",hour12:false}))%24;
   const p=propById(m.property_id), com=p.property_type==="COMMERCIAL";
@@ -101,6 +103,7 @@ function raise(m,type,severity,reason,data,keyOverride){
     const owner=PG.app_user.find(u=>u.resident_id===p.resident_id);
     if(owner){ MG.notifications.push({_id:"n"+(MG.notifications.length+1),user_id:owner.user_id,kind:"ALERT",title:type==="MISSING_DATA"?`Meters offline at ${p.property_code}`:`${UT[m.utility_type].label} alert at ${p.property_code}`,body:reason,created_at:now,read_at:null});
       log("mg",`Alert sent to ${owner.display}`,`db.notifications.insertOne({ user_id: "${owner.user_id.slice(0,8)}…", kind: "ALERT", title: "${UT[m.utility_type].label} alert at ${p.property_code}" })`); }
+    for(const f of ON_NEW_TICKET) f(t,{type,m});
   }
   // 3) mark the outbox entry as synced
   if(!ev.synced_to_sql){ ev.synced_to_sql=true; ev.ticket_no=t.ticket_no; }

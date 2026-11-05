@@ -16,7 +16,7 @@ const Sync=(()=>{
   const run=f=>{ chain=chain.then(f).catch(()=>{}); return chain; };
 
   const snapshot=()=>JSON.stringify({PG,MG,register:[...register],now,invSeq,tktSeq,txSeq,
-    sim:{running:SIM.running,mode:SIM.mode,offline:[...SIM.offline]},LOG});
+    sim:{running:SIM.running,mode:SIM.mode,offline:[...SIM.offline],policy:SIM.policy},LOG});
 
   function apply(s){
     for(const k in PG) PG[k]=s.PG[k]||[];
@@ -26,7 +26,7 @@ const Sync=(()=>{
     for(const a of byMeter.values()) a.sort((x,y)=>x.ts-y.ts);
     register.clear(); for(const [k,v] of s.register) register.set(k,v);
     now=s.now; invSeq=s.invSeq; tktSeq=s.tktSeq; txSeq=s.txSeq;
-    SIM.mode=s.sim.mode; SIM.offline=new Set(s.sim.offline);
+    SIM.mode=s.sim.mode; SIM.offline=new Set(s.sim.offline); if(s.sim.policy) SIM.policy=s.sim.policy;
     LOG.length=0; LOG.push(...s.LOG);
     if(SESSION.user) SESSION.user=PG.app_user.find(u=>u.user_id===SESSION.user.user_id)||null;
     if(SIM.running!==s.sim.running) setRunning(s.sim.running);

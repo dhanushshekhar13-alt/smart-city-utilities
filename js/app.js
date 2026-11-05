@@ -255,6 +255,7 @@ function ticketDetail(t,canAct){
   return `<div class="panel"><div class="panel-head"><div><span class="eyebrow">${esc(p.property_code)} · ${esc(p.address_line)} · ${esc(zname(p.zone_id))}</span><h2 class="mono">${t.ticket_no}</h2></div><div class="row">${sev(t.severity)}${badge(t.status)}</div></div>
    <p style="margin-bottom:8px">${esc(t.description)}</p>
    <p class="muted" style="margin-bottom:10px">Source ${t.source.toLowerCase()} · opened ${fmtDT(t.reported_timestamp)} · seen ${t.occurrence_count}× · last ${fmtT(t.last_seen_at)}${t.assigned_to?` · assigned to ${esc(userById(t.assigned_to).display)}`:""}</p>
+   <p style="margin-bottom:10px">SLA ${SLA_H[t.severity]} h for ${t.severity.toLowerCase()} · due ${fmtDT(t.sla_due_at)} ${slaBadge(t)}${t.escalated_at?` <span class="status s-crit">escalated ${fmtT(t.escalated_at)}</span>`:""}</p>
    ${canAct?`<div class="stack" style="border-top:1px solid var(--line);padding-top:12px"><div class="row"><h3>Update status</h3>${src("pg")}</div>
      <div class="row">${t.status==="OPEN"?`<button class="btn primary" data-act="t-take" data-id="${t.ticket_id}">Take this ticket</button>`:""}
      ${nexts.filter(s=>s!=="ASSIGNED").map(s=>`<button class="btn ${s==="RESOLVED"?"primary":""}" data-act="t-move" data-to="${s}" data-id="${t.ticket_id}">Move to ${s.replace("_"," ").toLowerCase()}</button>`).join("")}
@@ -274,8 +275,8 @@ V.queue=()=>{
   return `<div class="page-head"><span class="eyebrow">Maintenance console · ${esc(zname(u.staff_zone_id))}</span><h1>Ticket queue</h1>
    <p class="ink2">Row-level security shows staff only tickets for properties in their district. Kavya (South District) sees a different list.</p></div>
   <div class="panel"><div class="panel-head"><h2>Tickets in ${esc(zname(u.staff_zone_id))}</h2>${src("pg")}</div>
-   ${ts.length?`<div class="tablewrap"><table><thead><tr><th>Ticket</th><th>Property</th><th>Issue</th><th>Severity</th><th>Status</th><th class="r">Seen</th><th>Assigned</th></tr></thead><tbody>
-   ${ts.map(t=>`<tr class="click" data-act="sel-tk" data-id="${t.ticket_id}" tabindex="0"><td class="mono">${t.ticket_no}</td><td class="mono">${propById(t.property_id).property_code}</td><td>${t.issue_type.replace("_"," ").toLowerCase()}</td><td>${sev(t.severity)}</td><td>${badge(t.status)}</td><td class="r">${t.occurrence_count}×</td><td>${t.assigned_to?esc(userById(t.assigned_to).display):"–"}</td></tr>`).join("")}</tbody></table></div>`
+   ${ts.length?`<div class="tablewrap"><table><thead><tr><th>Ticket</th><th>Property</th><th>Issue</th><th>Severity</th><th>Status</th><th>SLA</th><th class="r">Seen</th><th>Assigned</th></tr></thead><tbody>
+   ${ts.map(t=>`<tr class="click" data-act="sel-tk" data-id="${t.ticket_id}" tabindex="0"><td class="mono">${t.ticket_no}</td><td class="mono">${propById(t.property_id).property_code}</td><td>${t.issue_type.replace("_"," ").toLowerCase()}</td><td>${sev(t.severity)}</td><td>${badge(t.status)}</td><td>${slaBadge(t)}</td><td class="r">${t.occurrence_count}×</td><td>${t.assigned_to?esc(userById(t.assigned_to).display)+(t.assigned_to===u.user_id?" (you)":""):"–"}</td></tr>`).join("")}</tbody></table></div>`
    :`<p class="muted">No tickets in your district yet. Ask the admin to run the pipe-burst scenario at Asha's home (Ward N-1), or a resident to submit a complaint.</p>`}</div>
   ${sel?ticketDetail(sel,true):""}`;
 };
@@ -304,7 +305,7 @@ V.ops=()=>{
   <div class="kpis">
    <div class="kpi"><span class="l">Electricity demand now ${src("mg")}</span><span class="v">${n1(lastV(city.E))} kW</span><span class="l">8 properties, 15-min average</span></div>
    <div class="kpi"><span class="l">Water flow now ${src("mg")}</span><span class="v">${n1(lastV(city.W))} L/min</span><span class="l">${lastV(city.W)>8?`<span class="status s-crit">Above normal</span>`:"Within normal range"}</span></div>
-   <div class="kpi"><span class="l">Active tickets ${src("pg")}</span><span class="v">${active.length}</span><span class="l">${active.filter(t=>t.severity==="CRITICAL").length} critical</span></div>
+   <div class="kpi"><span class="l">Active tickets ${src("pg")}</span><span class="v">${active.length}</span><span class="l">${active.filter(t=>t.severity==="CRITICAL").length} critical · ${active.filter(t=>now>t.sla_due_at).length} past SLA</span></div>
    <div class="kpi"><span class="l">Outstanding bills ${src("pg")}</span><span class="v">${inr(outstanding)}</span><span class="l">${inr(overdue)} overdue</span></div>
   </div>
   <div class="panel"><div class="panel-head"><div class="row"><h2>City demand, last 24 hours</h2>${src("mg")}</div>
@@ -336,6 +337,8 @@ V.scen=()=>{
   <div class="grid3">${sc.map(s=>`<div class="panel stack"><div class="row" style="justify-content:space-between"><h2>${s.title}</h2>${on(s)?`<span class="status s-crit">running</span>`:`<span class="status s-mute">idle</span>`}</div>
     <p class="mono" style="font-size:12px">${s.where}</p><p class="ink2">${s.what}</p>
     <div class="row">${on(s)?`<button class="btn" data-act="scen-stop" data-id="${s.id}">Restore normal</button>`:`<button class="btn primary" data-act="scen-start" data-id="${s.id}">Start ${s.title.toLowerCase()}</button>`}</div></div>`).join("")}</div>
+  <div class="panel"><div class="panel-head"><h2>Smart automation</h2><span class="muted">What the city does on its own when something happens</span></div>
+   <div class="policies">${POLICIES.map(([k,t,d])=>`<div class="policy"><div><b>${t}</b><p class="ink2">${d}</p></div><button class="switch" role="switch" aria-checked="${!!SIM.policy[k]}" data-act="policy" data-k="${k}"><span></span>${SIM.policy[k]?"On":"Off"}</button></div>`).join("")}</div></div>
   <div class="panel"><div class="panel-head"><h2>Switch a home's supply on or off</h2>${src("mg")}</div>
    <p class="ink2" style="margin-bottom:8px">For a home that is empty or disconnected. The meter keeps reporting every 15 city-minutes, but its usage reads 0, so the bill only counts what was used while it was on. The city clock keeps running. This is different from an outage, where meters stop reporting.</p>
    <div class="tablewrap"><table><thead><tr><th>Property</th><th>Zone</th>${Object.keys(UT).map(k=>`<th>${UT[k].label}</th>`).join("")}</tr></thead><tbody>
@@ -347,6 +350,9 @@ V.scen=()=>{
    <tr><td><b>Missing data</b></td><td>No reading from a property&#39;s meters for ${RULES.MISSING.ticks*TICK_MIN}+ min (one ticket per property)</td><td>${sev("MEDIUM")}</td></tr>
    </tbody></table></div></div>`;
 };
+const POLICIES=[
+  ["autoDispatch","Smart dispatch","New tickets go straight to an engineer whose district covers the property, picking whoever has the fewest open jobs. Each ticket gets an SLA deadline by severity and is escalated if it runs late."],
+];
 const isOff=code=>SIM.mode[code]==="OFF";
 function setSupply(code,on){
   const m=meterByCode(code), p=propById(m.property_id), label=UT[m.utility_type].label.toLowerCase();
@@ -451,6 +457,52 @@ function closeOctober(){
   toast(inv.created.length?`October closed: ${inv.created.length} new bills issued`:"October was already billed; nothing new");
   render();
 }
+// ---------- smart dispatch and SLA ----------
+const staffLoad=u=>PG.maintenance_ticket.filter(x=>x.assigned_to===u.user_id&&["ASSIGNED","IN_PROGRESS"].includes(x.status)).length;
+function autoDispatch(t){
+  if(!SIM.policy.autoDispatch||t.status!=="OPEN") return;
+  const p=propById(t.property_id);
+  const team=PG.app_user.filter(u=>u.role==="STAFF"&&zoneSubtree(u.staff_zone_id).includes(p.zone_id));
+  if(!team.length) return;
+  const loads=team.map(u=>[u,staffLoad(u)]).sort((a,b)=>a[1]-b[1]||PG.app_user.indexOf(a[0])-PG.app_user.indexOf(b[0]));
+  const [pick,n]=loads[0];
+  asSystem(()=>update("maintenance_ticket",t,{status:"ASSIGNED",assigned_to:pick.user_id}));
+  const why=`Auto-assigned to ${pick.display}: covers ${zname(districtOf(p.zone_id))}, ${n} open job${n===1?"":"s"}${loads.length>1?` (vs ${loads.slice(1).map(([u,k])=>`${u.display.split(" ")[0]} ${k}`).join(", ")})`:""}. SLA ${SLA_H[t.severity]} h, due ${fmtDT(t.sla_due_at)}.`;
+  const lg=MG.maintenance_logs.find(l=>l.ticket_no===t.ticket_no); if(lg) lg.entries.push({at:now,by:"dispatcher",kind:"DISPATCH",text:why});
+  log("pg",`${t.ticket_no} auto-assigned to ${pick.display}`,`SELECT fn_auto_assign('${t.ticket_no}');
+-- engineers whose zone contains the property, lightest workload first
+WITH RECURSIVE up AS (
+  SELECT zone_id, parent_zone_id FROM zone WHERE zone_id = (SELECT zone_id FROM property WHERE property_code = '${p.property_code}')
+  UNION ALL
+  SELECT z.zone_id, z.parent_zone_id FROM zone z JOIN up ON z.zone_id = up.parent_zone_id
+)
+SELECT u.user_id, COUNT(t.ticket_id) AS open_jobs
+FROM app_user u
+LEFT JOIN maintenance_ticket t ON t.assigned_to = u.user_id AND t.status IN ('ASSIGNED','IN_PROGRESS')
+WHERE u.role = 'STAFF' AND u.staff_zone_id IN (SELECT zone_id FROM up)
+GROUP BY u.user_id ORDER BY open_jobs, u.email LIMIT 1;
+-- then UPDATE maintenance_ticket SET status = 'ASSIGNED', assigned_to = … (history row by trigger)`);
+}
+ON_NEW_TICKET.push(t=>autoDispatch(t));
+// SLA watch: a ticket still open after its deadline is escalated once
+AFTER_BATCH.push(()=>{
+  for(const t of PG.maintenance_ticket){
+    if(!ACTIVE.includes(t.status)||t.escalated_at||now<=t.sla_due_at) continue;
+    asSystem(()=>update("maintenance_ticket",t,{escalated_at:now}));
+    const lg=MG.maintenance_logs.find(l=>l.ticket_no===t.ticket_no); if(lg) lg.entries.push({at:now,by:"sla-monitor",kind:"ESCALATION",text:`SLA of ${SLA_H[t.severity]} h missed. Escalated to the district supervisor.`});
+    log("pg",`${t.ticket_no} missed its ${SLA_H[t.severity]} h SLA and was escalated`,`UPDATE maintenance_ticket SET escalated_at = now()
+WHERE status IN ('OPEN','ASSIGNED','IN_PROGRESS') AND sla_due_at < now() AND escalated_at IS NULL
+RETURNING ticket_no;   -- runs every 15 min (pg_cron)`);
+  }
+});
+const dur=ms=>{ const m=Math.round(Math.abs(ms)/60e3); return m>=60?`${Math.floor(m/60)} h ${m%60?`${m%60} m`:""}`.trim():`${m} m`; };
+function slaBadge(t){
+  if(t.status==="RESOLVED"||t.status==="CLOSED") return t.resolved_at<=t.sla_due_at?`<span class="status s-ok">met</span>`:`<span class="status s-crit">missed</span>`;
+  const left=t.sla_due_at-now;
+  if(left<0) return `<span class="status s-crit">late ${dur(left)}</span>`;
+  return `<span class="status ${left<HOUR?"s-warn":"s-mute"}">${dur(left)} left</span>`;
+}
+
 // nightly jobs at 00:00 city time
 AFTER_BATCH.push(()=>{ if(cityDate(now)!==cityDate(now-TICK)) nightly(); });
 function nightly(){
@@ -466,8 +518,8 @@ V.tix=()=>{
   const ts=PG.maintenance_ticket.slice().sort((a,b)=>b.reported_timestamp-a.reported_timestamp);
   const sel=ts.find(t=>t.ticket_id===SESSION.sel.tk)||ts[0];
   return `<div class="page-head"><span class="eyebrow">Municipal operations</span><h1>All tickets</h1></div>
-  <div class="panel"><div class="panel-head"><h2>Every ticket in the city</h2>${src("pg")}</div>${ts.length?`<div class="tablewrap"><table><thead><tr><th>Ticket</th><th>Property</th><th>District</th><th>Issue</th><th>Severity</th><th>Status</th><th class="r">Seen</th><th>Assigned</th></tr></thead><tbody>
-  ${ts.map(t=>{const p=propById(t.property_id);return `<tr class="click" data-act="sel-tk" data-id="${t.ticket_id}" tabindex="0"><td class="mono">${t.ticket_no}</td><td class="mono">${p.property_code}</td><td>${esc(zname(districtOf(p.zone_id)))}</td><td>${t.issue_type.replace("_"," ").toLowerCase()}</td><td>${sev(t.severity)}</td><td>${badge(t.status)}</td><td class="r">${t.occurrence_count}×</td><td>${t.assigned_to?esc(userById(t.assigned_to).display):"–"}</td></tr>`;}).join("")}</tbody></table></div>`:`<p class="muted">No tickets yet.</p>`}</div>
+  <div class="panel"><div class="panel-head"><h2>Every ticket in the city</h2>${src("pg")}</div>${ts.length?`<div class="tablewrap"><table><thead><tr><th>Ticket</th><th>Property</th><th>District</th><th>Issue</th><th>Severity</th><th>Status</th><th>SLA</th><th class="r">Seen</th><th>Assigned</th></tr></thead><tbody>
+  ${ts.map(t=>{const p=propById(t.property_id);return `<tr class="click" data-act="sel-tk" data-id="${t.ticket_id}" tabindex="0"><td class="mono">${t.ticket_no}</td><td class="mono">${p.property_code}</td><td>${esc(zname(districtOf(p.zone_id)))}</td><td>${t.issue_type.replace("_"," ").toLowerCase()}</td><td>${sev(t.severity)}</td><td>${badge(t.status)}</td><td>${slaBadge(t)}</td><td class="r">${t.occurrence_count}×</td><td>${t.assigned_to?esc(userById(t.assigned_to).display):"–"}</td></tr>`;}).join("")}</tbody></table></div>`:`<p class="muted">No tickets yet.</p>`}</div>
   ${sel?ticketDetail(sel,false):""}`;
 };
 V.tix.live=true;
@@ -692,6 +744,7 @@ document.addEventListener("click",e=>{
   if(a==="supply"){ setSupply(b.dataset.code,b.dataset.on==="true"); toast(b.dataset.on==="true"?"Supply back on. Usage returns on the next reading.":"Supply off. Usage reads 0 from the next reading; the city clock keeps running."); return; }
   if(a==="scen-start"||a==="scen-stop"){ scenario(b.dataset.id,a==="scen-start"); toast(a==="scen-start"?"Scenario running. Press +1 hour to let the detector see it.":"Back to normal readings."); return; }
   if(a==="agg"){ runAggregation(); return; }
+  if(a==="policy"){ const k=b.dataset.k; SIM.policy[k]=!SIM.policy[k]; log("mg",`Automation ${k} switched ${SIM.policy[k]?"on":"off"}`,`db.settings.updateOne({ _id: "automation" }, { $set: { ${k}: ${SIM.policy[k]} } })`); render(); return; }
   if(a==="print-bill"){ const inv=rlsInvoices(u).find(i=>i.invoice_id===b.dataset.id); if(inv) printBill(inv); return; }
   if(a==="gen"){ generateInvoices(); return; }
   if(a==="rule"){ const i=+b.dataset.i; const t=V.rules.tries[i]; const box=$("#rule-"+i);
@@ -714,7 +767,8 @@ document.addEventListener("submit",e=>{
       log("pg",`Complaint ${t.ticket_no} created`,stmt);
       MG.maintenance_logs.push({_id:"log-"+t.ticket_no,ticket_no:t.ticket_no,entries:[{at:now,by:u.display,kind:"NOTE",text:desc}],attachments:[]});
       log("mg",`Ticket log started for ${t.ticket_no}`,`db.maintenance_logs.insertOne({ ticket_no: "${t.ticket_no}", entries: [ { by: "${u.display}", kind: "NOTE", text: $desc } ] })`);
-      toast(`Complaint ${t.ticket_no} submitted. Staff for this district can see it now.`); render();
+      autoDispatch(t);
+      toast(t.assigned_to?`Complaint ${t.ticket_no} submitted and assigned to ${userById(t.assigned_to).display}.`:`Complaint ${t.ticket_no} submitted. Staff for this district can see it now.`); render();
     }catch(err){ log("pg","Complaint rejected",stmt,{err:err.message}); toast(err.message.split("\n")[0].replace("ERROR:  ","")); } return; }
   if(f.id==="note-form"){ const u=SESSION.user; const tk=f.dataset.tk; const text=$("#note-text").value.trim(); if(!text) return;
     let lg=MG.maintenance_logs.find(l=>l.ticket_no===tk); if(!lg){ lg={_id:"log-"+tk,ticket_no:tk,entries:[],attachments:[]}; MG.maintenance_logs.push(lg); }
