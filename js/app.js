@@ -139,7 +139,7 @@ V.home=()=>{
    </div></div>
   <div class="panel"><div class="panel-head"><div class="row"><h2>Live usage, last 24 hours</h2>${src("mg")}</div>
      <div class="tabs" role="group" aria-label="Utility">${Object.keys(UT).map(k=>`<button aria-pressed="${k===ut}" data-act="sel-ut" data-ut="${k}"><span class="dot" style="background:${UT[k].color}"></span>${UT[k].label}</button>`).join("")}</div></div>
-   <p class="ink2" style="margin-bottom:8px">Right now: <b class="num">${last?n2(last.v):"–"} ${UT[ut].rate}</b> · meter <span class="mono">${m.meter_code}</span> · last reading ${last?fmtT(last.t):"–"}${SIM.offline.has(m.meter_code)?` · ${badge("OVERDUE","offline")}`:""}${isOff(m.meter_code)?` · ${badge("CLOSED","switched off")}`:""} · ${supplyBtn(m.meter_code,true)}</p>
+   <p class="ink2" style="margin-bottom:8px">Right now: <b class="num">${last?n2(last.v):"–"} ${UT[ut].rate}</b> · meter <span class="mono">${m.meter_code}</span> · last reading ${last?fmtT(last.t):"–"}${SIM.offline.has(m.meter_code)?` · ${badge("OVERDUE","offline")}`:""}${isOff(m.meter_code)?` · ${badge("CLOSED","switched off")}`:""}${SIM.mode[m.meter_code]==="SHUTOFF"?` · <span class="status s-warn">valve closed automatically</span>`:""} · ${supplyBtn(m.meter_code,true)}</p>
    ${chart("c-home",pts,{color:UT[ut].color,unit:UT[ut].rate})}
    <p class="muted" style="font-size:12px;margin-top:6px">Query: <code>db.meter_readings.find({ "meta.meter_code": "${m.meter_code}", ts: { $gte: now − 24h } }).sort({ ts: 1 })</code>, served by the index on (meta.meter_code, ts).</p></div>`;
 };
@@ -300,14 +300,21 @@ V.ops=()=>{
     const off=PG.utility_meter.filter(m=>codes.has(propById(m.property_id).property_code)&&SIM.offline.has(m.meter_code)).length;
     return {z,kw,flow,tk,owed,off};
   });
+  const kw=gridLoad(), pct=Math.round(kw/GRID_KW*100), dr=MG.demand_events.find(e=>e.status==="ACTIVE");
+  const auto=[...MG.device_commands.map(c=>({t:c.issued_at,txt:`${c.command==="CLOSE_VALVE"?"Closed":"Opened"} the water valve at ${c.property_code} (${c.reason})`,k:"valve"})),
+    ...MG.demand_events.map(e=>({t:e.started_at,txt:`Peak demand ${n1(e.start_kw)} kW: ${e.notified} residents asked to shift load${e.ended_at?`; ended ${fmtT(e.ended_at)}, peak ${n1(e.peak_kw)} kW`:""}`,k:"grid"})),
+    ...PG.maintenance_ticket.filter(t=>t.escalated_at).map(t=>({t:t.escalated_at,txt:`${t.ticket_no} missed its ${SLA_H[t.severity]} h SLA and was escalated`,k:"sla"}))].sort((a,b)=>b.t-a.t).slice(0,6);
   const health=PG.utility_meter.map(m=>{const a=byMeter.get(m.meter_code);const d=a[a.length-1];return {m,d,age:now-d.ts};}).sort((a,b)=>b.age-a.age).slice(0,6);
   return `<div class="page-head"><span class="eyebrow">Municipal operations</span><h1>City operations</h1></div>
   <div class="kpis">
-   <div class="kpi"><span class="l">Electricity demand now ${src("mg")}</span><span class="v">${n1(lastV(city.E))} kW</span><span class="l">8 properties, 15-min average</span></div>
    <div class="kpi"><span class="l">Water flow now ${src("mg")}</span><span class="v">${n1(lastV(city.W))} L/min</span><span class="l">${lastV(city.W)>8?`<span class="status s-crit">Above normal</span>`:"Within normal range"}</span></div>
+   <div class="kpi"><span class="l">Electricity grid load ${src("mg")}</span><span class="v">${pct}%</span><span class="l"><span class="meter"><span style="width:${Math.min(100,pct)}%;background:${pct>=90?"var(--crit)":pct>=75?"var(--warn)":"var(--ok)"}"></span></span>${n1(kw)} of ${GRID_KW} kW feeder capacity</span></div>
    <div class="kpi"><span class="l">Active tickets ${src("pg")}</span><span class="v">${active.length}</span><span class="l">${active.filter(t=>t.severity==="CRITICAL").length} critical · ${active.filter(t=>now>t.sla_due_at).length} past SLA</span></div>
    <div class="kpi"><span class="l">Outstanding bills ${src("pg")}</span><span class="v">${inr(outstanding)}</span><span class="l">${inr(overdue)} overdue</span></div>
   </div>
+  ${dr?`<div class="banner crit"><b>Peak demand event</b> since ${fmtT(dr.started_at)}: ${n1(kw)} kW now, peak ${n1(dr.peak_kw)} kW against ${GRID_KW} kW capacity. ${dr.notified} residents were asked to delay heavy appliances.</div>`:""}
+  <div class="panel"><div class="panel-head"><div class="row"><h2>Automatic actions</h2>${src("mg")}</div><span class="muted">What the city did on its own</span></div>
+   ${auto.length?`<div class="stack" style="gap:6px">${auto.map(a=>`<div class="row"><span class="status ${a.k==="valve"?"s-info":a.k==="grid"?"s-warn":"s-crit"}">${a.k==="valve"?"valve":a.k==="grid"?"grid":"SLA"}</span><span class="muted">${fmtDT(a.t)}</span><span>${esc(a.txt)}</span></div>`).join("")}</div>`:`<p class="muted">Nothing yet. Start the pipe burst or the electricity spike in the Disaster simulator and the city reacts here.</p>`}</div>
   <div class="panel"><div class="panel-head"><div class="row"><h2>City demand, last 24 hours</h2>${src("mg")}</div>
     <div class="tabs" role="group" aria-label="Utility">${Object.keys(UT).map(k=>`<button aria-pressed="${k===cut}" data-act="sel-cut" data-ut="${k}"><span class="dot" style="background:${UT[k].color}"></span>${UT[k].label}</button>`).join("")}</div></div>
     ${chart("c-city",citySeries(cut),{color:UT[cut].color,unit:UT[cut].rate,height:190})}
@@ -332,11 +339,12 @@ V.scen=()=>{
     {id:"spike",title:"Electricity spike",where:"P-0004 · Desai Bakery · Ward S-1",what:"Demand jumps to about 9–10 kW, over 3× the bakery's baseline. The spike rule opens a HIGH ticket for South District staff.",meter:"MTR-E-0004",mode:"SPIKE"},
     {id:"outage",title:"Local outage",where:"Ward S-2 · P-0006 and P-0007",what:"Six meters stop reporting. After 45 city-minutes the missing-data rule opens one ticket per property; the ward shows its meters offline.",ward:7}];
   const on=s=>s.ward?PG.property.filter(p=>p.zone_id===s.ward).some(p=>metersOf(p.property_id).some(m=>SIM.offline.has(m.meter_code))):SIM.mode[s.meter]===s.mode;
+  const contained=s=>s.meter&&SIM.mode[s.meter]==="SHUTOFF";
   return `<div class="page-head"><span class="eyebrow">Municipal operations</span><h1>Disaster simulator</h1>
    <p class="ink2">Each scenario changes what the simulated meters send to MongoDB. Detection, tickets and alerts then happen on their own, the same way they would with real meters. Press <b>+1 hour</b> in the top bar to skip ahead.</p></div>
-  <div class="grid3">${sc.map(s=>`<div class="panel stack"><div class="row" style="justify-content:space-between"><h2>${s.title}</h2>${on(s)?`<span class="status s-crit">running</span>`:`<span class="status s-mute">idle</span>`}</div>
+  <div class="grid3">${sc.map(s=>`<div class="panel stack"><div class="row" style="justify-content:space-between"><h2>${s.title}</h2>${contained(s)?`<span class="status s-warn">valve closed</span>`:on(s)?`<span class="status s-crit">running</span>`:`<span class="status s-mute">idle</span>`}</div>
     <p class="mono" style="font-size:12px">${s.where}</p><p class="ink2">${s.what}</p>
-    <div class="row">${on(s)?`<button class="btn" data-act="scen-stop" data-id="${s.id}">Restore normal</button>`:`<button class="btn primary" data-act="scen-start" data-id="${s.id}">Start ${s.title.toLowerCase()}</button>`}</div></div>`).join("")}</div>
+    <div class="row">${on(s)||contained(s)?`<button class="btn" data-act="scen-stop" data-id="${s.id}">Restore normal</button>`:`<button class="btn primary" data-act="scen-start" data-id="${s.id}">Start ${s.title.toLowerCase()}</button>`}</div></div>`).join("")}</div>
   <div class="panel"><div class="panel-head"><h2>Smart automation</h2><span class="muted">What the city does on its own when something happens</span></div>
    <div class="policies">${POLICIES.map(([k,t,d])=>`<div class="policy"><div><b>${t}</b><p class="ink2">${d}</p></div><button class="switch" role="switch" aria-checked="${!!SIM.policy[k]}" data-act="policy" data-k="${k}"><span></span>${SIM.policy[k]?"On":"Off"}</button></div>`).join("")}</div></div>
   <div class="panel"><div class="panel-head"><h2>Switch a home's supply on or off</h2>${src("mg")}</div>
@@ -351,6 +359,8 @@ V.scen=()=>{
    </tbody></table></div></div>`;
 };
 const POLICIES=[
+  ["autoValve","Automatic valve shut-off","When the leak rule opens a critical ticket, the city closes that home's smart water valve straight away and tells the resident. The valve opens again when the repair ticket is resolved."],
+  ["demandResponse","Peak demand response","When city electricity demand passes 90% of the feeder's ${GRID_KW} kW capacity, every resident gets a request to delay heavy appliances. The event ends when demand drops below 80%."],
   ["autoDispatch","Smart dispatch","New tickets go straight to an engineer whose district covers the property, picking whoever has the fewest open jobs. Each ticket gets an SLA deadline by severity and is escalated if it runs late."],
 ];
 const isOff=code=>SIM.mode[code]==="OFF";
@@ -502,6 +512,32 @@ function slaBadge(t){
   if(left<0) return `<span class="status s-crit">late ${dur(left)}</span>`;
   return `<span class="status ${left<HOUR?"s-warn":"s-mute"}">${dur(left)} left</span>`;
 }
+
+// ---------- smart actuators: leak valve shut-off ----------
+function valve(m,close,why,by){
+  const p=propById(m.property_id), o=ownerOf(p);
+  if(close) SIM.mode[m.meter_code]="SHUTOFF"; else if(SIM.mode[m.meter_code]==="SHUTOFF") delete SIM.mode[m.meter_code];
+  const cmd={_id:"cmd-"+(MG.device_commands.length+1),meter_code:m.meter_code,property_code:p.property_code,command:close?"CLOSE_VALVE":"OPEN_VALVE",reason:why,issued_by:by,issued_at:now,status:"ACKED",acked_at:now};
+  MG.device_commands.push(cmd);
+  log("mg",`Smart valve ${close?"closed":"opened"} at ${p.property_code} (${m.meter_code})`,`db.device_commands.insertOne({ meter_code: "${m.meter_code}", command: "${cmd.command}",\n  reason: "${why}", issued_by: "${by}", issued_at: ISODate(…), status: "SENT" })\n// the meter's gateway acknowledges → { $set: { status: "ACKED", acked_at: ISODate(…) } }`);
+  const t=PG.maintenance_ticket.find(x=>x.meter_id===m.meter_id&&x.issue_type==="LEAK"&&x.status!=="CLOSED"&&(close?ACTIVE.includes(x.status):true));
+  const lg=t&&MG.maintenance_logs.find(l=>l.ticket_no===t.ticket_no); if(lg) lg.entries.push({at:now,by,kind:"DEVICE",text:`${cmd.command} sent to ${m.meter_code}: ${why}`});
+  if(o) notify(o.user_id,"ALERT",close?`Water valve closed at ${p.property_code}`:`Water back on at ${p.property_code}`,close?`We detected a leak and closed your smart water valve automatically to stop the waste. An engineer has been assigned; water comes back on when the repair is done.`:`The repair is done and your water valve is open again.`);
+}
+ON_NEW_TICKET.push((t,{type,m})=>{ if(type==="LEAK"&&SIM.policy.autoValve) valve(m,true,"Leak rule fired (critical)","leak-rule"); });
+
+// ---------- peak demand response ----------
+function gridLoad(){ return PG.utility_meter.filter(m=>m.utility_type==="ELECTRICITY").reduce((s,m)=>{const a=byMeter.get(m.meter_code);const d=a&&a[a.length-1];return s+(d&&now-d.ts<TICK*2?d._rate:0);},0); }
+AFTER_BATCH.push(()=>{
+  const kw=gridLoad(); let ev=MG.demand_events.find(e=>e.status==="ACTIVE");
+  if(ev){ ev.peak_kw=Math.max(ev.peak_kw,kw); if(kw<0.8*GRID_KW){ ev.status="ENDED"; ev.ended_at=now; log("mg",`Peak demand event ended (${n1(kw)} kW)`,`db.demand_events.updateOne({ _id: "${ev._id}" }, { $set: { status: "ENDED", ended_at: ISODate(…) } })`); } return; }
+  if(!SIM.policy.demandResponse||kw<0.9*GRID_KW) return;
+  const res=PG.app_user.filter(u=>u.role==="RESIDENT");
+  ev={_id:"dr-"+(MG.demand_events.length+1),started_at:now,ended_at:null,start_kw:kw,peak_kw:kw,capacity_kw:GRID_KW,status:"ACTIVE",notified:res.length};
+  MG.demand_events.push(ev);
+  res.forEach(u=>notify(u.user_id,"DEMAND","Peak demand: please ease off for an hour",`The city grid is at ${Math.round(kw/GRID_KW*100)}% of capacity. Please delay the washing machine, geyser, iron and EV charging for the next hour. Your usage is not cut; this only spreads the load.`));
+  log("mg",`Peak demand event: ${n1(kw)} kW of ${GRID_KW} kW; ${res.length} residents asked to shift load`,`db.demand_events.insertOne({ started_at: ISODate(…), start_kw: ${n2(kw)}, capacity_kw: ${GRID_KW}, status: "ACTIVE" })\ndb.notifications.insertMany([ …${res.length} × { kind: "DEMAND" } ])`);
+});
 
 // nightly jobs at 00:00 city time
 AFTER_BATCH.push(()=>{ if(cityDate(now)!==cityDate(now-TICK)) nightly(); });
@@ -732,7 +768,7 @@ document.addEventListener("click",e=>{
       const lg=MG.maintenance_logs.find(l=>l.ticket_no===t.ticket_no)||(MG.maintenance_logs.push({_id:"log-"+t.ticket_no,ticket_no:t.ticket_no,entries:[],attachments:[]}),MG.maintenance_logs[MG.maintenance_logs.length-1]);
       lg.entries.push({at:now,by:u.display,kind:"STATUS",text:`Status changed to ${to}`});
       log("mg","Status mirrored to the ticket log",`db.maintenance_logs.updateOne({ ticket_no: "${t.ticket_no}" },\n  { $push: { entries: { by: "${u.display}", kind: "STATUS", text: "Status changed to ${to}" } } })`);
-      if(to==="RESOLVED"){ const m=PG.utility_meter.find(x=>x.meter_id===t.meter_id); if(m) delete SIM.mode[m.meter_code];
+      if(to==="RESOLVED"){ const m=PG.utility_meter.find(x=>x.meter_id===t.meter_id); if(m){ if(SIM.mode[m.meter_code]==="SHUTOFF") valve(m,false,`Ticket ${t.ticket_no} resolved`,u.display); else delete SIM.mode[m.meter_code]; }
         const p=propById(t.property_id); if(!PG.maintenance_ticket.some(x=>x!==t&&x.property_id===p.property_id&&ACTIVE.includes(x.status))) p.service_status="NORMAL";
         MG.anomaly_events.filter(ev=>ev.key===t.anomaly_key&&ev.status!=="RESOLVED").forEach(ev=>ev.status="RESOLVED");
         toast(`${t.ticket_no} resolved. The meter is back to normal readings.`); }

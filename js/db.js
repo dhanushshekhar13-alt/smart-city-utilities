@@ -39,7 +39,7 @@ const TRANSITIONS={OPEN:["ASSIGNED"],ASSIGNED:["IN_PROGRESS"],IN_PROGRESS:["RESO
 // ---------- stores ----------
 const PG={zone:[],resident:[],property:[],utility_meter:[],billing_cycle:[],utility_rate:[],aggregation_run:[],meter_reading:[],
           invoice:[],invoice_line_item:[],payment:[],maintenance_ticket:[],ticket_status_history:[],app_user:[],user_session:[]};
-const MG={meter_readings:[],anomaly_events:[],maintenance_logs:[],notifications:[],ingestion_batches:[]};
+const MG={meter_readings:[],anomaly_events:[],maintenance_logs:[],notifications:[],ingestion_batches:[],device_commands:[],demand_events:[]};
 const byMeter=new Map(); // index on meta.meter_code (stands in for { "meta.meter_code": 1, ts: -1 })
 
 // ---------- activity log ----------

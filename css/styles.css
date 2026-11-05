@@ -183,3 +183,9 @@ textarea.in { resize:vertical; min-height:64px; }
 .switch span::after { content:""; position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%; background:#fff; transition:left .15s; }
 .switch[aria-checked="true"] { color:var(--ok); border-color:var(--ok); }
 .switch[aria-checked="true"] span { background:var(--ok); } .switch[aria-checked="true"] span::after { left:14px; }
+.meter { display:block; height:6px; border-radius:99px; background:var(--surface-2); overflow:hidden; margin:4px 0 3px; }
+.meter > span { display:block; height:100%; border-radius:99px; }
+.banner { border-radius:var(--r); padding:10px 14px; font-size:13.5px; }
+.banner.crit { background:var(--crit-soft); color:var(--ink); border:1px solid var(--crit); }
+.banner.ok { background:var(--ok-soft); color:var(--ink); border:1px solid var(--ok); }
+.banner.warn { background:var(--warn-soft); color:var(--ink); border:1px solid var(--warn); }

@@ -3,7 +3,8 @@
 
 // ---------- IoT simulator: MongoDB time-series readings ----------
 const SIM={running:true,mode:{},offline:new Set(),timer:null,
-  policy:{autoDispatch:true}}; // smart automation switches (admin → Disaster simulator)
+  policy:{autoDispatch:true,autoValve:true,demandResponse:true}}; // smart automation switches (admin → Disaster simulator)
+const GRID_KW=15; // feeder capacity for the 8 demo properties, used by peak demand response
 const ON_NEW_TICKET=[]; // jobs that run when the detector opens a ticket
 const profile=(m,t)=>{ // hourly-shaped demand, in kW / L/min / m³/h
   const h=Number(new Date(t).toLocaleString("en-GB",{...IST,hour:"2-digit",hour12:false}))%24;
@@ -18,14 +19,14 @@ function makeReading(m,t){
   let rate=profile(m,t);
   if(mode==="BURST") rate=rand(13.5,15.5);
   if(mode==="SPIKE") rate=rand(8.5,10.5);
-  if(mode==="OFF") rate=0; // supply switched off: the meter keeps reporting, usage stays at zero
+  if(mode==="OFF"||mode==="SHUTOFF") rate=0; // supply switched off: the meter keeps reporting, usage stays at zero
   // advance the cumulative register by 15 minutes of use
   const inc=m.utility_type==="ELECTRICITY"?rate*TICK_MIN/60:m.utility_type==="WATER"?rate*TICK_MIN/1000:rate*TICK_MIN/60;
   const reg=Math.round((register.get(m.meter_code)+inc)*1000)/1000; register.set(m.meter_code,reg);
   const meta={meter_code:m.meter_code,property_code:p.property_code,utility:m.utility_type,zone:zname(p.zone_id)};
   const doc={_id:"r"+Math.floor(rnd()*1e12).toString(36),ts:t,meta};
   if(m.utility_type==="ELECTRICITY"){ Object.assign(doc,{kwh_total:reg,voltage:Math.round(rand(226,234)*10)/10,current:Math.round(rate*1000/230*10)/10,power_factor:Math.round(rand(0.9,0.98)*100)/100,_rate:rate}); }
-  else if(m.utility_type==="WATER"){ Object.assign(doc,{volume_l_total:Math.round(reg*1000),flow_lpm:Math.round(rate*100)/100,pressure_psi:Math.round((mode==="BURST"?rand(22,28):rand(55,62))*10)/10,_rate:rate}); }
+  else if(m.utility_type==="WATER"){ Object.assign(doc,{volume_l_total:Math.round(reg*1000),flow_lpm:Math.round(rate*100)/100,pressure_psi:Math.round((mode==="BURST"?rand(22,28):mode==="SHUTOFF"?0:rand(55,62))*10)/10,_rate:rate}); }
   else { Object.assign(doc,{m3_total:reg,pressure_kpa:Math.round(rand(2.0,2.2)*100)/100,_rate:rate}); }
   return doc;
 }
