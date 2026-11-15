@@ -1,0 +1,2 @@
+# Count every .sql file as PostgreSQL (PL/pgSQL) in GitHub's language stats; plain SQL is otherwise treated as data and hidden.
+*.sql linguist-language=PLpgSQL
