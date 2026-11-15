@@ -1,0 +1,23 @@
+{
+  "name": "smart-city-utilities",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Smart City Utilities & Infrastructure Management: PostgreSQL + MongoDB + Node.js (DBMS mini-project)",
+  "main": "server/index.js",
+  "engines": { "node": ">=20.11" },
+  "scripts": {
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "setup": "node scripts/setup.js",
+    "reset": "node scripts/setup.js --reset",
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "export": "node scripts/export.js",
+    "test": "node --test --test-concurrency=1"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "mongodb": "^6.12.0",
+    "pg": "^8.13.1"
+  }
+}
