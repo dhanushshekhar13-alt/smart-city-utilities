@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Smart City Utilities</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <div id="app"><p class="loading" style="padding:40px 16px">Loading…</p></div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <!-- Load order matters: core defines the helpers every page file uses, app.js boots last. -->
+  <script src="/js/core.js"></script>
+  <script src="/js/resident.js"></script>
+  <script src="/js/staff.js"></script>
+  <script src="/js/admin.js"></script>
+  <script src="/js/common.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>
