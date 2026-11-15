@@ -11,8 +11,9 @@ let lastActivity = -1, offline = false, busy = false;
 
 // ---------- top bar ----------
 function renderTop() {
-  const u = APP.user, c = APP.clock, admin = u && u.role === "ADMIN";
-  $("#top").innerHTML = `<div class="brand"><div class="brand-mark" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M9 1 3 9h4l-1 6 6-8H8z" fill="var(--accent-ink)"/></svg></div>
+  const u = APP.user, c = APP.clock, admin = u && u.role === "ADMIN", top = $("#top");
+  if (!top) return;
+  top.innerHTML = `<div class="brand"><div class="brand-mark" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M9 1 3 9h4l-1 6 6-8H8z" fill="var(--accent-ink)"/></svg></div>
     <div class="brand-name">Smart City Utilities</div><span class="pill">PostgreSQL + MongoDB · synthetic data</span></div>
     <div class="spacer"></div>
     <div class="clock">${c ? `<span class="time badge-live${c.running ? "" : " paused"}" id="clock-time" title="Simulated city clock: one tick is ${c.tick_minutes} city minutes, every 2 seconds">City time ${fmtDT(c.city_now)}${c.running ? "" : " · paused"}</span>` : ""}
@@ -51,7 +52,7 @@ async function renderLogin() {
   if (APP.demo && !APP.data.accounts) { try { APP.data.accounts = (await api("/auth/demo-accounts")).accounts; } catch { APP.data.accounts = []; } }
   const accts = APP.data.accounts || [], reg = APP.sel.reg, pick = APP.sel.pick || (accts[0] && accts[0].email) || "";
   const roleOf = a => a.role === "RESIDENT" ? "Resident" : a.role === "STAFF" ? `Staff · ${a.zone_name || ""}` : "City admin";
-  app().innerHTML = `<header class="topbar" id="top"></header>${offline ? `<div class="offline-bar">The server is not answering. Retrying…</div>` : ""}<div class="login">
+  app().innerHTML = `<header class="topbar" id="top"></header><div class="offline-bar" id="offline" ${offline ? "" : "hidden"}>The server is not answering. Retrying…</div><div class="login">
    <section class="login-hero">
     <span class="eyebrow">DBMS mini-project · Dhanush &amp; Gagan</span>
     <h1>Smart City Utilities &amp; Infrastructure Management</h1>
@@ -161,19 +162,20 @@ async function render({ live = false } = {}) {
 let dirty = false;
 const typing = () => { const a = document.activeElement; return dirty || (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && $("#main") && $("#main").contains(a)); };
 async function pollClock(skipLive) {
-  try {
-    const c = await api("/clock"), prev = APP.clock;
-    if (offline) { offline = false; const ob = $("#offline"); if (ob) ob.hidden = true; }
-    APP.clock = c;
-    if (!prev || prev.running !== c.running || !!prev.open_cycle !== !!c.open_cycle || (prev.open_cycle && c.open_cycle && prev.open_cycle.id !== c.open_cycle.id)) renderTop(); else updateClockText();
-    if (!APP.user || skipLive || busy) return;
-    const view = V[APP.view];
-    if (prev && prev.version !== c.version && view && view.live && !typing()) await render({ live: true });
-    else if (c.activity !== lastActivity) refreshRail();
-  } catch (e) {
+  let c;
+  try { c = await api("/clock"); }
+  catch (e) {
     if (e instanceof ApiError) return;
-    offline = true; const ob = $("#offline"); if (ob) ob.hidden = false;
+    offline = true; const ob = $("#offline"); if (ob) ob.hidden = false;   // only a failed request means the server is down
+    return;
   }
+  if (offline) { offline = false; const ob = $("#offline"); if (ob) ob.hidden = true; }
+  const prev = APP.clock; APP.clock = c;
+  if (!prev || prev.running !== c.running || !!prev.open_cycle !== !!c.open_cycle || (prev.open_cycle && c.open_cycle && prev.open_cycle.id !== c.open_cycle.id)) renderTop(); else updateClockText();
+  if (!APP.user || skipLive || busy) return;
+  const view = V[APP.view];
+  if (prev && prev.version !== c.version && view && view.live && !typing()) await render({ live: true });
+  else if (c.activity !== lastActivity) refreshRail();
 }
 
 // ---------- events ----------
