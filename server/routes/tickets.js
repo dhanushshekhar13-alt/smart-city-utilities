@@ -56,9 +56,12 @@ async function staffTicket(req) {
 
 r.post('/:id/take', requireRole('STAFF'), h(async (req, res) => {
   const t = await staffTicket(req);
-  const stmt = `UPDATE maintenance_ticket SET status = 'ASSIGNED', assigned_to = app_uid()\nWHERE ticket_no = '${t.ticket_no}';   -- policy ticket_staff_update; trigger trg_ticket_transition checks OPEN → ASSIGNED`;
-  try { await asUser(req.user, c => c.query("UPDATE maintenance_ticket SET status = 'ASSIGNED', assigned_to = app_uid() WHERE ticket_id = $1", [t.ticket_id])); }
+  const stmt = `UPDATE maintenance_ticket SET status = 'ASSIGNED', assigned_to = app_uid()\nWHERE ticket_no = '${t.ticket_no}' AND status = 'OPEN';   -- policy ticket_staff_update; trigger trg_ticket_transition checks OPEN → ASSIGNED`;
+  let n;
+  // AND status = 'OPEN': if someone took it a moment earlier, this matches nothing instead of taking it from them
+  try { n = (await asUser(req.user, c => c.query("UPDATE maintenance_ticket SET status = 'ASSIGNED', assigned_to = app_uid() WHERE ticket_id = $1 AND status = 'OPEN'", [t.ticket_id]))).rowCount; }
   catch (e) { logPg(req.user, `Rejected: ${t.ticket_no} → ASSIGNED`, stmt, e); throw e; }
+  need(n, 409, t.assigned_name ? `This ticket is already assigned to ${t.assigned_name}.` : 'This ticket is no longer open.');
   logPg(req.user, `${t.ticket_no} taken by ${req.user.display_name}`, stmt);
   await logEntry(ctx(null, req.user), t.ticket_no, 'STATUS', 'Status changed to ASSIGNED');
   res.json({ ok: true });

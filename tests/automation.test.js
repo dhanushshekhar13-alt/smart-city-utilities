@@ -42,6 +42,11 @@ test('a resident complaint goes to the engineer with fewer open jobs', async () 
   assert.equal(r.status, 200);
   const t = await one('SELECT u.display_name FROM maintenance_ticket t JOIN app_user u ON u.user_id = t.assigned_to WHERE t.ticket_no = $1', [r.body.ticket_no]);
   assert.equal(t.display_name, 'Ravi Kumar');
+  // another engineer cannot take a ticket that is already assigned
+  const { ticket_id } = await one('SELECT ticket_id FROM maintenance_ticket WHERE ticket_no = $1', [r.body.ticket_no]);
+  assert.equal((await neha.post(`/tickets/${ticket_id}/take`)).status, 409);
+  const still = await one('SELECT u.display_name FROM maintenance_ticket t JOIN app_user u ON u.user_id = t.assigned_to WHERE t.ticket_id = $1', [ticket_id]);
+  assert.equal(still.display_name, 'Ravi Kumar');
 });
 
 test('staff follow the state machine, need notes to resolve, and resolving reopens the valve', async () => {

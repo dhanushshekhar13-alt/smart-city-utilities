@@ -14,7 +14,7 @@ All endpoints are under `/api` and return JSON.
 | 401 | Not signed in, or the session ended |
 | 403 | Wrong role, or a PostgreSQL permission error (`42501`) |
 | 404 | Not found, or hidden by row-level security |
-| 409 | Already exists |
+| 409 | Already exists, or the ticket was already taken |
 | 423 | Account locked |
 
 ## Accounts — `/api/auth`
@@ -63,7 +63,7 @@ All endpoints are under `/api` and return JSON.
 |---|---|---|---|
 | GET | `/` | all | Tickets the person can see |
 | GET | `/:id` | all | `{ ticket, history, entries }` (entries come from MongoDB `maintenance_logs`) |
-| POST | `/:id/take` | staff | Assign an OPEN ticket to yourself |
+| POST | `/:id/take` | staff | Assign an OPEN ticket to yourself. `409` if someone already took it |
 | POST | `/:id/status` | staff | `{ to, notes? }`. Notes are required to resolve. Resolving clears the fault and reopens a closed valve |
 | POST | `/:id/notes` | staff | `{ text }`: adds a field note |
 | DELETE | `/:id/notes/:entry` | staff | Delete your own note |
